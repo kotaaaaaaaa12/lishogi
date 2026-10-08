@@ -1,0 +1,8 @@
+{
+  "lishogi": {"url": "https://github.com/WandererXII/lishogi", "commit": "5394fc3dd868de1442ea24ecd87cdf065dea2f33"},
+  "lila-ws": {"url": "https://github.com/WandererXII/lila-ws", "commit": "4329e717f2ddebcfd3f167897199ec4ee02f90c5"},
+  "shoginet": {"url": "https://github.com/WandererXII/shoginet", "commit": "2669e52994445e772a043fa76f471b7a8b2ba884"},
+  "YaneuraOu": {"url": "https://github.com/yaneurao/YaneuraOu", "commit": "c1b80eaa09fe13d5f12b1599d1ae4d53c224de30"},
+  "Fairy-Stockfish": {"url": "https://github.com/ianfab/Fairy-Stockfish", "commit": "9f778da667f6e07dae1e85d3e2ea204fc6dee94d"},
+  "ruleLibraryUsedByLishogi": "io.github.wandererxii:scalashogi_2.13:13.2.0"
+}

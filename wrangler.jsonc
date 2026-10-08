@@ -1,0 +1,28 @@
+{
+  "$schema": "./cloudflare/node_modules/wrangler/config-schema.json",
+  "name": "lishogi-cloudflare",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-10-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {"enabled": true},
+  "vars": {
+    "PUBLIC_ORIGIN": "https://shogi.example.com",
+    "BACKUP_INTERVAL_SECONDS": "60",
+    "MAIL_FROM": "noreply@example.com"
+  },
+  "containers": [{
+    "class_name": "LishogiServer",
+    "image": "./cloudflare/Dockerfile",
+    "image_build_context": ".",
+    "instance_type": "standard-4",
+    "max_instances": 1,
+    "constraints": {"regions": ["APAC"]}
+  }],
+  "durable_objects": {
+    "bindings": [{"name": "LISHOGI", "class_name": "LishogiServer"}]
+  },
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["LishogiServer"]}],
+  "r2_buckets": [{"binding": "BACKUPS", "bucket_name": "lishogi-backups"}],
+  "send_email": [{"name": "EMAIL"}]
+}

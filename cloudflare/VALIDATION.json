@@ -1,0 +1,23 @@
+{
+  "status": "unfinished integration alpha",
+  "javascriptTests": {
+    "passed": 16,
+    "failed": 0
+  },
+  "workerBundle": "passed: Wrangler 4.148.0 dry run with containers rollout disabled",
+  "containerBuild": "blocked: Docker CLI is not available in this environment",
+  "upstreamScalaTests": "blocked: sbt boot-server Unix socket operation is not permitted",
+  "cloudflareDeployment": "not performed",
+  "liveMultiplayer": "not verified",
+  "liveAiPlay": "not verified",
+  "emailDelivery": "not verified",
+  "r2Recovery": "not verified against live Cloudflare",
+  "knownIncompleteAreas": [
+    "transaction-level database durability",
+    "search",
+    "image and GIF helpers",
+    "curated datasets",
+    "provider integrations",
+    "source publication page"
+  ]
+}
