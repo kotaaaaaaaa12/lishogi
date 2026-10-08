@@ -1,6 +1,7 @@
 {
   "name": "lishogi",
   "private": true,
+  "packageManager": "pnpm@10.11.1",
   "description": "lishogi.org: the forever free, adless and open source shogi server",
   "repository": {
     "type": "git",

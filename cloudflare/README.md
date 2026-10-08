@@ -24,7 +24,7 @@ The default `standard-4` instance has four vCPUs and 12 GiB memory. It stays run
 ## Apply to a fork
 
 1. Fork `https://github.com/WandererXII/lishogi`. The inspected baseline is commit `5394fc3dd868de1442ea24ecd87cdf065dea2f33`.
-2. Extract this overlay into the root of the fork. It adds `cloudflare/`, `.dockerignore` and `wrangler.jsonc` without overwriting the upstream application package files.
+2. Extract this overlay into the root of the fork. It adds `cloudflare/`, `.dockerignore` and `wrangler.jsonc`, adds `packageManager: pnpm@10.11.1` to the upstream root `package.json`, and refreshes `pnpm-lock.yaml` to match the pinned upstream workspace manifests. If your fork already has changes to that manifest, merge this field instead of replacing the file. When updating an existing installation, preserve your configured `wrangler.jsonc`.
 3. Set `PUBLIC_ORIGIN` in `wrangler.jsonc` to your real HTTPS origin, without a path, query or nonstandard port. Set `MAIL_FROM` to your verified sender address.
 4. Enable Containers on Workers Paid. Create a **private** R2 bucket named `lishogi-backups`, or update the bucket binding to your own name.
 5. Onboard your domain in **Email Service > Email Sending**. Ordinary Email Routing alone is insufficient for unrestricted authentication emails.
@@ -33,13 +33,28 @@ The default `standard-4` instance has four vCPUs and 12 GiB memory. It stays run
 
 Keep `USER_PASSWORD_SECRET` stable across updates: it is part of password verification. Keep `PLAY_SECRET` stable to preserve sessions and signed links.
 
+To update the first alpha overlay for the build fix, copy `package.json`, `pnpm-lock.yaml` and `cloudflare/` from this ZIP into the existing fork. Keep the existing `wrangler.jsonc` with your domain and bindings, and retain the Worker secrets.
+
 Workers Builds settings for the GitHub fork:
+
+First set these variables in **Settings > Build > Build Variables and Secrets**:
+
+| Build variable | Value |
+| --- | --- |
+| `SKIP_DEPENDENCY_INSTALL` | `1` |
+| `PNPM_VERSION` | `10.11.1` |
+
+These are build-environment variables, configured in the dashboard. Automatic dependency installation runs before the custom build command. Disabling it is required for this overlay: Workers Builds only needs the dependencies in `cloudflare/`, while the root pnpm workspace is installed inside the Docker image with pnpm 10.11.1. Setting the build command alone does not disable the automatic root installation.
 
 ```text
 Root directory: /
 Build command: cd cloudflare && npm ci
 Deploy command: cd cloudflare && npx wrangler deploy --config ../wrangler.jsonc
 ```
+
+If the log reports `Expected version: >=10.6` and `Got: 9.10.0`, check that `SKIP_DEPENDENCY_INSTALL=1` was saved for the build environment and retry. The initially detected tool version can differ from the executable used for automatic installation; that log does not establish why the older executable was selected.
+
+The original pinned upstream lockfile listed `svgson` for `@build/pieces`, while its manifest already depended on `jsdom` and `svg-path-bbox`. This revision refreshes the root lockfile so the Docker build can retain `--frozen-lockfile`.
 
 Wrangler builds the image during deployment. The image build installs and builds the upstream pnpm workspace, compiles both Scala servers and compiles both native engines. A full build can take substantial time; no prebuilt application or engine binary is included in this overlay.
 
@@ -101,6 +116,7 @@ Retain upstream copyright and license notices. Publish corresponding source for 
 
 Official documentation checked on October 8, 2026:
 
+- https://developers.cloudflare.com/workers/ci-cd/builds/build-image/
 - https://developers.cloudflare.com/containers/faq/
 - https://developers.cloudflare.com/containers/guides/snapshots/
 - https://developers.cloudflare.com/containers/concepts/placement/

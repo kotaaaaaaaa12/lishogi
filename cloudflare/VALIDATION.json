@@ -19,5 +19,17 @@
     "curated datasets",
     "provider integrations",
     "source publication page"
-  ]
+  ],
+  "buildDependencyChecks": {
+    "workerNpmCi": "passed",
+    "rootPnpmVersion": "10.11.1",
+    "rootLockfile": "passed: pnpm install --frozen-lockfile --ignore-scripts --lockfile-only --offline across 45 workspace projects",
+    "fullRootDependencyInstall": "not performed; lockfile validation only",
+    "workersBuildVariables": {
+      "SKIP_DEPENDENCY_INSTALL": "1",
+      "PNPM_VERSION": "10.11.1"
+    },
+    "liveWorkersBuild": "not performed",
+    "nonfatalWarnings": "upstream deprecated dependencies and @pnpm/logger peer dependency warnings"
+  }
 }

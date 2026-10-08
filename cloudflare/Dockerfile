@@ -8,7 +8,7 @@ RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git g++ make python3 \
- && npm install -g pnpm@10.6.5 \
+ && npm install -g pnpm@10.11.1 \
  && rm -rf /var/lib/apt/lists/*
 ARG LILA_WS_COMMIT=4329e717f2ddebcfd3f167897199ec4ee02f90c5
 ARG SHOGINET_COMMIT=2669e52994445e772a043fa76f471b7a8b2ba884
