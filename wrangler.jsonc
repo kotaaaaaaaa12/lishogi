@@ -1,16 +1,24 @@
 {
-  "$schema": "./cloudflare/node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "lishogi-cloudflare",
   "main": "cloudflare/worker.mjs",
   "compatibility_date": "2026-10-08",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "observability": {"enabled": true},
+  // Edit the public runtime settings here. Deployment dependencies are pinned in package.json.
+  // Workers Builds runs dependency installation before reading runtime vars.
   "vars": {
     "PUBLIC_ORIGIN": "https://shogi.example.com",
     "BACKUP_INTERVAL_SECONDS": "60",
     "MAIL_FROM": "noreply@example.com"
   },
+  // Configure each secret value once on the Worker. Existing values are retained on deployment.
+  "secrets": {
+    "required": ["CONTAINER_CONTROL_TOKEN", "PLAY_SECRET", "USER_PASSWORD_SECRET", "SHOGINET_KEY"]
+  },
+  // To manage your custom domain here, uncomment this entry and replace the example domain.
+  // "routes": [{"pattern": "shogi.example.com", "custom_domain": true}],
   "containers": [{
     "class_name": "LishogiServer",
     "image": "./cloudflare/Dockerfile",

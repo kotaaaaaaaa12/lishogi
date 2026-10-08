@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",
+    "@cloudflare/containers": "0.3.7",
     "@config/tsconfig": "workspace:*",
     "@types/jquery": "^3.5.34",
     "@types/lishogi": "workspace:*",
@@ -29,7 +30,8 @@
     "stylelint": "^16.26.1",
     "stylelint-config-standard-scss": "^16.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "4.148.0"
   },
   "scripts": {
     "preinstall": "npx only-allow pnpm",

@@ -24,51 +24,51 @@ The default `standard-4` instance has four vCPUs and 12 GiB memory. It stays run
 ## Apply to a fork
 
 1. Fork `https://github.com/WandererXII/lishogi`. The inspected baseline is commit `5394fc3dd868de1442ea24ecd87cdf065dea2f33`.
-2. Extract this overlay into the root of the fork. It adds `cloudflare/`, `.dockerignore` and `wrangler.jsonc`, adds `packageManager: pnpm@10.11.1` to the upstream root `package.json`, and refreshes `pnpm-lock.yaml` to match the pinned upstream workspace manifests. If your fork already has changes to that manifest, merge this field instead of replacing the file. When updating an existing installation, preserve your configured `wrangler.jsonc`.
+2. Extract this overlay into the root of the fork. It adds `cloudflare/`, `.dockerignore` and `wrangler.jsonc`, pins pnpm 10.11.1 and the deployment dependencies in the upstream root `package.json`, and refreshes `pnpm-lock.yaml` to match the pinned upstream workspace manifests. If your fork already has changes to that manifest, merge this field instead of replacing the file. When updating an existing installation, preserve your configured `wrangler.jsonc`.
 3. Set `PUBLIC_ORIGIN` in `wrangler.jsonc` to your real HTTPS origin, without a path, query or nonstandard port. Set `MAIL_FROM` to your verified sender address.
 4. Enable Containers on Workers Paid. Create a **private** R2 bucket named `lishogi-backups`, or update the bucket binding to your own name.
 5. Onboard your domain in **Email Service > Email Sending**. Ordinary Email Routing alone is insufficient for unrestricted authentication emails.
-6. Add a Worker custom domain matching `PUBLIC_ORIGIN`.
+6. To manage the custom domain in `wrangler.jsonc`, uncomment the `routes` example and replace its pattern with the real hostname from `PUBLIC_ORIGIN`. Alternatively, retain your existing Worker custom domain.
 7. Configure four distinct Worker secrets: `CONTAINER_CONTROL_TOKEN`, `PLAY_SECRET`, `USER_PASSWORD_SECRET` and `SHOGINET_KEY`. Generate the password key with `node cloudflare/generate-secret.mjs --password`; generate each other secret separately with `node cloudflare/generate-secret.mjs`. Do not commit secret values. The password key must be a Base64-encoded 32-byte AES key, not a hex token.
 
 Keep `USER_PASSWORD_SECRET` stable across updates: it is part of password verification. Keep `PLAY_SECRET` stable to preserve sessions and signed links.
 
-To update the first alpha overlay for the build fix, copy `package.json`, `pnpm-lock.yaml` and `cloudflare/` from this ZIP into the existing fork. Keep the existing `wrangler.jsonc` with your domain and bindings, and retain the Worker secrets.
+To update an existing alpha installation, copy `package.json`, `pnpm-lock.yaml` and `cloudflare/` from this ZIP into the existing fork. Merge the configuration changes into your existing `wrangler.jsonc`, preserving your real domain, sender and bucket bindings. The new `$schema` points at the root-installed Wrangler, and `secrets.required` declares the four existing secret names. Retain their values.
 
-Workers Builds settings for the GitHub fork:
+## Configuration and Workers Builds
 
-First set these variables in **Settings > Build > Build Variables and Secrets**:
+`wrangler.jsonc` contains the public runtime variables (`PUBLIC_ORIGIN`, `MAIL_FROM`, `BACKUP_INTERVAL_SECONDS`), the required secret names, Container sizing and region, R2 and email bindings, and the optional custom-domain route. Set the two example addresses to your real origin and verified sender.
 
-| Build variable | Value |
-| --- | --- |
-| `SKIP_DEPENDENCY_INSTALL` | `1` |
-| `PNPM_VERSION` | `10.11.1` |
+Secret values remain Worker secrets. Their names are declared in `secrets.required`, so Wrangler can report missing credentials before deployment. Keep existing values across updates. Do not copy them into a public repository.
 
-These are build-environment variables, configured in the dashboard. Automatic dependency installation runs before the custom build command. Disabling it is required for this overlay: Workers Builds only needs the dependencies in `cloudflare/`, while the root pnpm workspace is installed inside the Docker image with pnpm 10.11.1. Setting the build command alone does not disable the automatic root installation.
+Use these Workers Builds settings for the GitHub fork:
 
 ```text
 Root directory: /
-Build command: cd cloudflare && npm ci
-Deploy command: cd cloudflare && npx wrangler deploy --config ../wrangler.jsonc
+Build command: (leave empty)
+Deploy command: npx wrangler deploy
 ```
 
-If the log reports `Expected version: >=10.6` and `Got: 9.10.0`, check that `SKIP_DEPENDENCY_INSTALL=1` was saved for the build environment and retry. The initially detected tool version can differ from the executable used for automatic installation; that log does not establish why the older executable was selected.
+No `SKIP_DEPENDENCY_INSTALL` or `PNPM_VERSION` build variables are required for this revision. Cloudflare's automatic dependency installation installs the root pnpm workspace, including the pinned Wrangler and `@cloudflare/containers`. The root `packageManager` field pins pnpm 10.11.1, and the Docker image also uses that version. No separate `cloudflare/` dependency-install command is needed for deployment.
+
+If you configured `SKIP_DEPENDENCY_INSTALL=1` for a previous revision, remove it so the automatic installation runs. The old `PNPM_VERSION` build variable can also be removed; the pinned version now comes from `package.json`.
+
+Build-environment variables and runtime `vars` are different Cloudflare settings. Putting `SKIP_DEPENDENCY_INSTALL` under `vars` does not control the dependency installer. This revision avoids needing that setting instead of adding an ineffective runtime variable. Workers Builds also does not honor Wrangler Custom Builds as its CI build-command configuration.
 
 The original pinned upstream lockfile listed `svgson` for `@build/pieces`, while its manifest already depended on `jsdom` and `svg-path-bbox`. This revision refreshes the root lockfile so the Docker build can retain `--frozen-lockfile`.
 
 Wrangler builds the image during deployment. The image build installs and builds the upstream pnpm workspace, compiles both Scala servers and compiles both native engines. A full build can take substantial time; no prebuilt application or engine binary is included in this overlay.
 
-For local deployment on a machine with Docker:
+For local deployment from the repository root on a machine with Docker:
 
 ```bash
-cd cloudflare
-npm ci
-npx wrangler r2 bucket create lishogi-backups
-npx wrangler secret put CONTAINER_CONTROL_TOKEN --config ../wrangler.jsonc
-npx wrangler secret put PLAY_SECRET --config ../wrangler.jsonc
-npx wrangler secret put USER_PASSWORD_SECRET --config ../wrangler.jsonc
-npx wrangler secret put SHOGINET_KEY --config ../wrangler.jsonc
-npm run deploy
+pnpm install --frozen-lockfile
+pnpm exec wrangler r2 bucket create lishogi-backups
+pnpm exec wrangler secret put CONTAINER_CONTROL_TOKEN
+pnpm exec wrangler secret put PLAY_SECRET
+pnpm exec wrangler secret put USER_PASSWORD_SECRET
+pnpm exec wrangler secret put SHOGINET_KEY
+pnpm exec wrangler deploy
 ```
 
 Domain placeholders are deliberately rejected at runtime. The initial request restores the last committed backup before exposing the application. It then generates configuration, starts Lishogi and lila-ws and launches the local AI worker. Startup failures return HTTP 503.
@@ -96,11 +96,9 @@ Therefore this checkpoint does **not** yet satisfy the requirement that every Li
 ## Verify before completion
 
 ```bash
-cd cloudflare
-npm ci
-npm test
-npx wrangler deploy --dry-run --containers-rollout=none --config ../wrangler.jsonc
-cd ..
+pnpm install --frozen-lockfile
+node --test cloudflare/test/*.test.mjs
+pnpm exec wrangler deploy --dry-run --containers-rollout=none
 bash cloudflare/verify-image.sh
 ```
 
@@ -117,6 +115,8 @@ Retain upstream copyright and license notices. Publish corresponding source for 
 Official documentation checked on October 8, 2026:
 
 - https://developers.cloudflare.com/workers/ci-cd/builds/build-image/
+- https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
+- https://developers.cloudflare.com/workers/wrangler/configuration/
 - https://developers.cloudflare.com/containers/faq/
 - https://developers.cloudflare.com/containers/guides/snapshots/
 - https://developers.cloudflare.com/containers/concepts/placement/

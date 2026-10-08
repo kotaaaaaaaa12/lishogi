@@ -4,7 +4,7 @@
     "passed": 16,
     "failed": 0
   },
-  "workerBundle": "passed: Wrangler 4.148.0 dry run with containers rollout disabled",
+  "workerBundle": "passed: root npx --no-install wrangler deploy --dry-run --containers-rollout=none, with cloudflare/node_modules temporarily removed",
   "containerBuild": "blocked: Docker CLI is not available in this environment",
   "upstreamScalaTests": "blocked: sbt boot-server Unix socket operation is not permitted",
   "cloudflareDeployment": "not performed",
@@ -21,14 +21,14 @@
     "source publication page"
   ],
   "buildDependencyChecks": {
-    "workerNpmCi": "passed",
     "rootPnpmVersion": "10.11.1",
     "rootLockfile": "passed: pnpm install --frozen-lockfile --ignore-scripts --lockfile-only --offline across 45 workspace projects",
-    "fullRootDependencyInstall": "not performed; lockfile validation only",
-    "workersBuildVariables": {
-      "SKIP_DEPENDENCY_INSTALL": "1",
-      "PNPM_VERSION": "10.11.1"
-    },
+    "rootDeploymentDependencies": "passed: pnpm install --frozen-lockfile --filter lishogi, including install scripts",
+    "fullRootDependencyInstall": "not performed; installation focused on the root project",
+    "rootDeployCommand": "passed: npx --no-install wrangler deploy --dry-run --containers-rollout=none without cloudflare/node_modules",
+    "workersBuildVariables": {},
+    "workersBuildCommand": "leave empty",
+    "workersDeployCommand": "npx wrangler deploy",
     "liveWorkersBuild": "not performed",
     "nonfatalWarnings": "upstream deprecated dependencies and @pnpm/logger peer dependency warnings"
   }
