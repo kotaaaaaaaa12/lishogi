@@ -18,8 +18,10 @@ ARG YANEURAOU_COMMIT=c1b80eaa09fe13d5f12b1599d1ae4d53c224de30
 ARG FAIRY_COMMIT=9f778da667f6e07dae1e85d3e2ea204fc6dee94d
 WORKDIR /build/lishogi
 COPY . .
-RUN test -f build.sbt && test -f pnpm-lock.yaml \
- && if [ -d node_modules ]; then echo 'Host node_modules was copied. Commit cloudflare/Dockerfile.dockerignore before building.' >&2; exit 1; fi \
+# Wrangler passes this Dockerfile on stdin, so only the context root ignore file applies.
+# Remove host dependencies before installation even if that file was not uploaded.
+RUN find . -name node_modules -prune -exec rm -rf {} + \
+ && test -f build.sbt && test -f pnpm-lock.yaml \
  && cp conf/application.conf.default conf/application.conf \
  && pnpm install --frozen-lockfile \
  && pnpm server:i18n \
