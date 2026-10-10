@@ -5,32 +5,63 @@
   "compatibility_date": "2026-10-08",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "observability": {"enabled": true},
-  // Edit the public runtime settings here. Deployment dependencies are pinned in package.json.
-  // Workers Builds runs dependency installation before reading runtime vars.
+  "observability": {
+    "enabled": true
+  },
   "vars": {
-    "PUBLIC_ORIGIN": "https://shogi.example.com",
+    "PUBLIC_ORIGIN": "https://shogi.what-the-fuck.men",
     "BACKUP_INTERVAL_SECONDS": "60",
-    "MAIL_FROM": "noreply@example.com"
+    "MAIL_FROM": "shogi@what-the-fuck.men"
   },
-  // Configure each secret value once on the Worker. Existing values are retained on deployment.
   "secrets": {
-    "required": ["CONTAINER_CONTROL_TOKEN", "PLAY_SECRET", "USER_PASSWORD_SECRET", "SHOGINET_KEY"]
+    "required": [
+      "CONTAINER_CONTROL_TOKEN",
+      "PLAY_SECRET",
+      "USER_PASSWORD_SECRET",
+      "SHOGINET_KEY"
+    ]
   },
-  // To manage your custom domain here, uncomment this entry and replace the example domain.
-  // "routes": [{"pattern": "shogi.example.com", "custom_domain": true}],
-  "containers": [{
-    "class_name": "LishogiServer",
-    "image": "./cloudflare/Dockerfile",
-    "image_build_context": ".",
-    "instance_type": "standard-4",
-    "max_instances": 1,
-    "constraints": {"regions": ["APAC"]}
-  }],
+  "routes": [
+    {
+      "pattern": "shogi.what-the-fuck.men",
+      "custom_domain": true
+    }
+  ],
+  "containers": [
+    {
+      "class_name": "LishogiServer",
+      "image": "./cloudflare/Dockerfile",
+      "image_build_context": ".",
+      "instance_type": "standard-4",
+      "max_instances": 1,
+      "constraints": {
+        "regions": ["APAC"]
+      }
+    }
+  ],
   "durable_objects": {
-    "bindings": [{"name": "LISHOGI", "class_name": "LishogiServer"}]
+    "bindings": [
+      {
+        "name": "LISHOGI",
+        "class_name": "LishogiServer"
+      }
+    ]
   },
-  "migrations": [{"tag": "v1", "new_sqlite_classes": ["LishogiServer"]}],
-  "r2_buckets": [{"binding": "BACKUPS", "bucket_name": "lishogi-backups"}],
-  "send_email": [{"name": "EMAIL"}]
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["LishogiServer"]
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BACKUPS",
+      "bucket_name": "lishogi-backups"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ]
 }
