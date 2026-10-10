@@ -19,7 +19,8 @@ export function buildConfiguration(env) {
     throw new Error('Configure MAIL_FROM using your verified Cloudflare Email Sending domain.');
   }
   const q = JSON.stringify;
-  const app = `include "application"
+  // Load packaged defaults explicitly; a relative include would reload this generated file.
+  const app = `include required(classpath("application.conf"))
 mongodb.uri = "mongodb://localhost:27017/lishogi?replicaSet=rs0"
 study.mongodb.uri = \${mongodb.uri}
 puzzle.mongodb.uri = \${mongodb.uri}
@@ -53,7 +54,7 @@ play.server.http.address = "127.0.0.1"
 play.server.http.port = 9663
 play.filters.hosts.allowed = [${q(origin.host)}, "localhost", "127.0.0.1"]
 `;
-  const socket = `include "application"
+  const socket = `include required(classpath("application.conf"))
 http.port = 9664
 mongo.uri = "mongodb://localhost:27017/lishogi?replicaSet=rs0"
 study.mongo.uri = \${mongo.uri}
