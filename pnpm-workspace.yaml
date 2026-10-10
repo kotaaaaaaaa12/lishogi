@@ -17,6 +17,7 @@ minimumReleaseAgeExclude:
 
 onlyBuiltDependencies:
   - esbuild
+  - ttf2woff2
 patchedDependencies:
   '@toast-ui/editor': patches/@toast-ui__editor.patch
 
