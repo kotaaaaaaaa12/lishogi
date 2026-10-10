@@ -1,0 +1,12 @@
+# Exclude host dependencies and generated outputs from the container build.
+**/.git
+**/node_modules
+**/target
+.cloudflare-build
+.wrangler
+public
+public-prod
+.dev.vars*
+**/.dev.vars*
+**/*.zip
+**/*.log
