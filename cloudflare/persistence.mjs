@@ -28,10 +28,25 @@ export async function publishBackup(bucket, response, now = Date.now()) {
     throw new Error('Database backup response is incomplete.');
   }
   const key = `${PREFIX}archives/${now}-${crypto.randomUUID()}.gz`;
-  const archive = await bucket.put(key, response.body, {
-    httpMetadata: {contentType: 'application/gzip'},
-    customMetadata: {sha256, createdAt: new Date(now).toISOString()},
-  });
+  // Container proxy streams do not retain a runtime-known length for R2.
+  const {readable, writable} = new FixedLengthStream(size);
+  const abort = new AbortController();
+  const transfer = response.body.pipeTo(writable, {signal: abort.signal});
+  let archive;
+  try {
+    [archive] = await Promise.all([
+      Promise.resolve().then(() => bucket.put(key, readable, {
+        httpMetadata: {contentType: 'application/gzip'},
+        customMetadata: {sha256, createdAt: new Date(now).toISOString()},
+      })),
+      transfer,
+    ]);
+  } catch (error) {
+    abort.abort(error);
+    await readable.cancel(error).catch(() => {});
+    await transfer.catch(() => {});
+    throw error;
+  }
   if (!archive || archive.size !== size) throw new Error('R2 did not commit the complete database backup.');
   const manifest = {version: 1, key, size, sha256, createdAt: new Date(now).toISOString()};
   await bucket.put(MANIFEST, JSON.stringify(manifest), {

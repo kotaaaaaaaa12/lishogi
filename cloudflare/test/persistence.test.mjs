@@ -2,6 +2,25 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {loadBackup, publishBackup, publicRequest} from '../persistence.mjs';
 
+// Node lacks this Workers API. The workerd integration test covers real R2 streams.
+if (!globalThis.FixedLengthStream) {
+  globalThis.FixedLengthStream = class extends TransformStream {
+    constructor(length) {
+      let received = 0;
+      super({
+        transform(chunk, controller) {
+          received += chunk.byteLength;
+          if (received > length) throw new Error('Backup stream exceeds its declared length.');
+          controller.enqueue(chunk);
+        },
+        flush() {
+          if (received !== length) throw new Error('Backup stream is shorter than its declared length.');
+        },
+      });
+    }
+  };
+}
+
 const sha = 'b'.repeat(64);
 function memoryBucket() {
   const values = new Map();
@@ -79,6 +98,18 @@ test('incomplete backup responses cannot replace a committed backup', async () =
   const previous = await publishBackup(bucket, response(), 100);
   await assert.rejects(publishBackup(bucket, new Response('partial'), 200), /incomplete/);
   assert.deepEqual((await loadBackup(bucket)).manifest, previous);
+});
+
+test('short and oversized streams cannot replace a committed backup', async () => {
+  const bucket = memoryBucket();
+  const previous = await publishBackup(bucket, response(), 100);
+  for (const body of ['short', 'oversized']) {
+    const invalid = new Response(body, {headers: {
+      'content-length': '7', 'x-backup-sha256': sha,
+    }});
+    await assert.rejects(publishBackup(bucket, invalid, 200), /declared length/);
+    assert.deepEqual((await loadBackup(bucket)).manifest, previous);
+  }
 });
 
 test('untrusted forwarding headers and control credentials do not reach the application', () => {
