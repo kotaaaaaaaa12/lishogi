@@ -46,9 +46,6 @@ object layout {
           a(activeCls("password"), href := routes.Account.passwd)(
             trans.changePassword(),
           ),
-          a(activeCls("email"), href := routes.Account.email)(
-            trans.changeEmail(),
-          ),
           a(activeCls("twofactor"), href := routes.Account.twoFactor)(
             trans.tfa.twoFactorAuth(),
           ),

@@ -26,8 +26,6 @@ object security {
           div(cls := "box__pad")(
             p(
               "This is a list of devices and applications that are logged into your account. If you notice any suspicious activity, make sure to ",
-              a(href := routes.Account.email)("check your recovery email address"),
-              " and ",
               a(href := routes.Account.passwd)("change your password"),
               ".",
             ),

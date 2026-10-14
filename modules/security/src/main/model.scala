@@ -39,7 +39,7 @@ case class LameNameCheck(value: Boolean) extends AnyVal
 
 case class UserSignup(
     user: User,
-    email: EmailAddress,
+    email: Option[EmailAddress],
     req: RequestHeader,
     fingerPrint: Option[FingerHash],
     suspIp: Boolean,

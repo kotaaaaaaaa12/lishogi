@@ -176,29 +176,22 @@ final class Auth(
       implicit val req = ctx.body
       NoTor {
         Firewall {
-          forms.preloadEmailDns >> negotiate(
+          negotiate(
             html = env.security.signup
               .website(ctx.blind)
               .flatMap {
                 case Signup.RateLimited => limitedDefault.zero.fuccess
                 case Signup.Bad(err) =>
                   BadRequest(html.auth.signup(err, env.security.recaptchaPublicConfig)).fuccess
-                case Signup.ConfirmEmail(user, email) =>
-                  fuccess {
-                    Redirect(routes.Auth.checkYourEmail) withCookies
-                      lila.security.EmailConfirm.cookie
-                        .make(env.lilaCookie, user, email)(ctx.req)
-                  }
-                case Signup.AllSet(user, email) =>
-                  welcome(user, email, sendWelcomeEmail = false) >> redirectNewUser(user)
+                case Signup.AllSet(user) =>
+                  welcomeWithoutEmail(user) >> redirectNewUser(user)
               },
             json = env.security.signup.mobile
               .flatMap {
                 case Signup.RateLimited        => limitedDefault.zero.fuccess
                 case Signup.Bad(err)           => jsonFormError(err)
-                case Signup.ConfirmEmail(_, _) => Ok(Json.obj("email_confirm" -> true)).fuccess
-                case Signup.AllSet(user, email) =>
-                  welcome(user, email, sendWelcomeEmail = false) >> authenticateUser(user)
+                case Signup.AllSet(user) =>
+                  welcomeWithoutEmail(user) >> authenticateUser(user)
               },
           )
         }
@@ -208,13 +201,18 @@ final class Auth(
   private def welcome(user: UserModel, email: EmailAddress, sendWelcomeEmail: Boolean)(implicit
       ctx: Context,
   ): Funit = {
-    garbageCollect(user, email)
+    env.security.garbageCollector.delay(user, email.some, ctx.req)
     if (sendWelcomeEmail) env.security.automaticEmail.welcome(user, email)
     env.pref.api.saveNewUserPrefs(user, ctx.req)
   }
 
-  private def garbageCollect(user: UserModel, email: EmailAddress)(implicit ctx: Context) =
-    env.security.garbageCollector.delay(user, email, ctx.req)
+  private def welcomeWithoutEmail(user: UserModel)(implicit ctx: Context): Funit = {
+    env.security.garbageCollector.delay(user, none, ctx.req)
+    env.pref.api.saveNewUserPrefs(user, ctx.req)
+  }
+
+  private def garbageCollect(user: UserModel, email: EmailAddress)(implicit ctx: Context): Unit =
+    env.security.garbageCollector.delay(user, email.some, ctx.req)
 
   def checkYourEmail =
     Open { implicit ctx =>

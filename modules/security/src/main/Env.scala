@@ -134,14 +134,6 @@ final class Env(
 
   lazy val spam = new Spam(spamKeywordsSetting.get _)
 
-  scheduler.scheduleOnce(30 seconds)(disposableEmailDomain.refresh())
-  scheduler.scheduleWithFixedDelay(
-    config.disposableEmail.refreshDelay,
-    config.disposableEmail.refreshDelay,
-  ) { () =>
-    disposableEmailDomain.refresh()
-  }
-
   lazy val tor: Tor = wire[Tor]
   scheduler.scheduleOnce(31 seconds)(tor.refresh.unit)
   scheduler.scheduleWithFixedDelay(config.tor.refreshDelay, config.tor.refreshDelay) { () =>

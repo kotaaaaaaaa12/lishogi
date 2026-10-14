@@ -14,7 +14,6 @@ import org.joda.time.DateTime
 import reactivemongo.api.ReadPreference
 import reactivemongo.api.bson._
 
-import lila.common.EmailAddress
 import lila.common.HTTPRequest
 import lila.common.IpAddress
 import lila.common.Random
@@ -31,7 +30,6 @@ final class SecurityApi(
     firewall: Firewall,
     geoIP: GeoIP,
     authenticator: lila.user.Authenticator,
-    emailValidator: EmailAddressValidator,
     oAuthServer: OAuthServer,
     tor: Tor,
 )(implicit ec: scala.concurrent.ExecutionContext) {
@@ -71,12 +69,8 @@ final class SecurityApi(
     )
 
   def loadLoginForm(str: String): Fu[Form[LoginCandidate.Result]] = {
-    emailValidator.validate(EmailAddress(str)) match {
-      case Some(EmailAddressValidator.Acceptable(email)) =>
-        authenticator.loginCandidateByEmail(email.normalize)
-      case None if User.couldBeUsername(str) => authenticator.loginCandidateById(User normalize str)
-      case _                                 => fuccess(none)
-    }
+    if (User.couldBeUsername(str)) authenticator.loginCandidateById(User normalize str)
+    else fuccess(none)
   } map loadedLoginForm _
 
   @nowarn("cat=unused")
@@ -92,12 +86,10 @@ final class SecurityApi(
   def saveAuthentication(userId: User.ID)(implicit
       req: RequestHeader,
   ): Fu[String] =
-    userRepo mustConfirmEmail userId flatMap {
-      case true => fufail(SecurityApi MustConfirmEmail userId)
-      case false =>
-        val sessionId = Random secureString 22
-        if (tor isExitNode HTTPRequest.lastRemoteAddress(req)) logger.info(s"TOR login $userId")
-        store.save(sessionId, userId, req, up = true, fp = none) inject sessionId
+    {
+      val sessionId = Random secureString 22
+      if (tor isExitNode HTTPRequest.lastRemoteAddress(req)) logger.info(s"TOR login $userId")
+      store.save(sessionId, userId, req, up = true, fp = none) inject sessionId
     }
 
   def saveSignup(userId: User.ID, fp: Option[FingerPrint])(implicit

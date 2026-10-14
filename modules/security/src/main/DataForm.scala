@@ -81,35 +81,12 @@ final class DataForm(
         u => !userRepo.nameExists(u).await(3 seconds, "signupUsername"),
       )
 
-    private val agreementBool = boolean.verifying(b => b)
-
-    private val agreement = mapping(
-      "assistance" -> agreementBool,
-      "nice"       -> agreementBool,
-      "account"    -> agreementBool,
-      "policy"     -> agreementBool,
-    )(AgreementData.apply)(AgreementData.unapply)
-
+    // Other internal forms still reuse this validator; registration does not bind it.
     val emailField = withAcceptableDns(acceptableUniqueEmail(none))
 
-    val website = Form(
-      mapping(
-        "username"             -> username,
-        "password"             -> text(minLength = 4),
-        "email"                -> emailField,
-        "agreement"            -> agreement,
-        "fp"                   -> optional(nonEmptyText),
-        "g-recaptcha-response" -> optional(nonEmptyText),
-      )(SignupData.apply)(_ => None),
-    )
+    val website = websiteSignupForm(username)
 
-    val mobile = Form(
-      mapping(
-        "username" -> username,
-        "password" -> text(minLength = 4),
-        "email"    -> emailField,
-      )(MobileSignupData.apply)(_ => None),
-    )
+    val mobile = mobileSignupForm(username)
   }
 
   val passwordReset = Form(
@@ -243,6 +220,32 @@ final class DataForm(
 
 object DataForm {
 
+  private val agreementBool = boolean.verifying(b => b)
+
+  private val agreement = mapping(
+    "assistance" -> agreementBool,
+    "nice"       -> agreementBool,
+    "account"    -> agreementBool,
+    "policy"     -> agreementBool,
+  )(AgreementData.apply)(AgreementData.unapply)
+
+  private[security] def websiteSignupForm(username: Mapping[String]) = Form(
+    mapping(
+      "username"             -> username,
+      "password"             -> text(minLength = 4),
+      "agreement"            -> agreement,
+      "fp"                   -> optional(nonEmptyText),
+      "g-recaptcha-response" -> optional(nonEmptyText),
+    )(SignupData.apply)(_ => None),
+  )
+
+  private[security] def mobileSignupForm(username: Mapping[String]) = Form(
+    mapping(
+      "username" -> username,
+      "password" -> text(minLength = 4),
+    )(MobileSignupData.apply)(_ => None),
+  )
+
   case class AgreementData(
       assistance: Boolean,
       nice: Boolean,
@@ -253,14 +256,11 @@ object DataForm {
   case class SignupData(
       username: String,
       password: String,
-      email: String,
       agreement: AgreementData,
       fp: Option[String],
       `g-recaptcha-response`: Option[String],
   ) {
     def recaptchaResponse = `g-recaptcha-response`
-
-    def realEmail = EmailAddress(email)
 
     def fingerPrint = fp.filter(_.nonEmpty) map FingerPrint.apply
   }
@@ -268,10 +268,7 @@ object DataForm {
   case class MobileSignupData(
       username: String,
       password: String,
-      email: String,
-  ) {
-    def realEmail = EmailAddress(email)
-  }
+  )
 
   case class PasswordReset(
       email: String,

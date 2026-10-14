@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {publicRequest} from '../persistence.mjs';
 import {waitForStartup, startupResponse, fetchWithRetry} from '../readiness.mjs';
+import {emailServiceDisabled, emailDisabledResponse} from '../auth-policy.mjs';
 
 const source = await readFile(new URL('../worker.mjs', import.meta.url), 'utf8');
 // Execute the Worker handlers with the Cloudflare-only Container dependency mocked.
@@ -14,7 +15,7 @@ const context = vm.createContext({
     deleteSchedules() {}
   },
   ContainerProxy: class {}, publicRequest, waitForStartup, startupResponse, fetchWithRetry,
-  loadBackup() {}, publishBackup() {}, handleMail() {},
+  loadBackup() {}, publishBackup() {}, emailServiceDisabled, emailDisabledResponse,
   Request, Response, Headers, URL, console: {info() {}, error() {}},
 });
 new vm.Script(source.replace(/^import .*;\n/gm, '')
@@ -79,7 +80,7 @@ test('health reports startup state without starting or exposing secrets', async 
   const response = await server.fetch(new Request('https://shogi.what-the-fuck.men/healthz'));
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), {
-    ready: false, stage: 'idle', release: 'standard2-idle-stream-20261014-v3',
+    ready: false, stage: 'idle', release: 'standard2-no-email-20261014-v4',
   });
   server.applicationReady = true;
   server.stage('ready');
@@ -99,6 +100,18 @@ test('the outer Worker returns a versioned 503 for binding errors', async () => 
   });
   assert.equal(response.status, 503);
   assert.equal((await response.json()).stage, 'request-failed');
+});
+
+test('email URLs return 410 without starting or contacting the container', async () => {
+  const {server, background} = fixture();
+  server.ensureReady = () => {throw new Error('Mail routes must not start the application');};
+  const req = new Request('https://shogi.what-the-fuck.men/password/reset/send', {method: 'POST'});
+  assert.equal((await server.fetch(req)).status, 410);
+  assert.equal(background.length, 0);
+  assert.equal((await context.handlers.worker.fetch(req, {
+    PUBLIC_ORIGIN: 'https://shogi.what-the-fuck.men',
+    LISHOGI: {idFromName: () => {throw new Error('Mail routes must not contact the binding');}},
+  })).status, 410);
 });
 
 test('background checkpoints neither restart stopped containers nor renew activity', async () => {

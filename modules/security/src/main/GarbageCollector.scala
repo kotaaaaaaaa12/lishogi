@@ -28,12 +28,12 @@ final class GarbageCollector(
 
   private val done = new lila.memo.ExpireSetMemo(10 minutes)
 
-  private case class ApplyData(user: User, ip: IpAddress, email: EmailAddress, req: RequestHeader) {
-    override def toString = s"${user.username} $ip ${email.value} $req"
+  private case class ApplyData(user: User, ip: IpAddress, email: Option[EmailAddress], req: RequestHeader) {
+    override def toString = s"${user.username} $ip ${email.fold("none")(_.value)} $req"
   }
 
   // User just signed up and doesn't have security data yet, so wait a bit
-  def delay(user: User, email: EmailAddress, req: RequestHeader): Unit =
+  def delay(user: User, email: Option[EmailAddress], req: RequestHeader): Unit =
     if (user.createdAt.isAfter(DateTime.now minusDays 3)) {
       val ip = HTTPRequest lastRemoteAddress req
       system.scheduler
@@ -100,13 +100,13 @@ final class GarbageCollector(
 
   private def isBadAccount(user: User) = user.lameOrTrollOrAlt
 
-  private def collect(user: User, email: EmailAddress, msg: => String): Funit =
+  private def collect(user: User, email: Option[EmailAddress], msg: => String): Funit =
     !done.get(user.id) ?? {
       done put user.id
       val armed = isArmed()
       val wait  = (30 + ThreadLocalRandom.nextInt(300)).seconds
       val message =
-        s"Will dispose of @${user.username} in $wait. Email: ${email.value}. $msg${!armed ?? " [SIMULATION]"}"
+        s"Will dispose of @${user.username} in $wait. Email: ${email.fold("none")(_.value)}. $msg${!armed ?? " [SIMULATION]"}"
       logger.info(message)
       noteApi.lishogiWrite(user, s"Garbage collected because of $msg")
       fuccess(

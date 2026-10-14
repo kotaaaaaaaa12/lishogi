@@ -30,7 +30,10 @@ object signup {
         h1(trans.signUp()),
         postForm(id := "signup_form", cls := "form3", action := routes.Auth.signupPost)(
           auth.bits
-            .formFields(form("username"), form("password"), form("email").some, register = true),
+            .formFields(form("username"), form("password"), none, register = true),
+          p(cls := "form-help")(
+            "No email address is collected. Keep your username and password safe; email password recovery is unavailable.",
+          ),
           input(id := "signup-fp-input", name := "fp", tpe := "hidden"),
           div(cls := "form-group text", dataIcon := Icons.infoCircle)(
             trans.computersAreNotAllowedToPlay(),

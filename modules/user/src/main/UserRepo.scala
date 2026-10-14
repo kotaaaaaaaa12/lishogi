@@ -273,6 +273,24 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
       mustConfirmEmail: Boolean,
       lang: Option[String] = None,
   ): Fu[Option[User]] =
+    createWithOptionalEmail(username, passwordHash, email.some, blind, mustConfirmEmail, lang)
+
+  def createWithoutEmail(
+      username: String,
+      passwordHash: HashedPassword,
+      blind: Boolean,
+      lang: Option[String] = None,
+  ): Fu[Option[User]] =
+    createWithOptionalEmail(username, passwordHash, none, blind, mustConfirmEmail = false, lang = lang)
+
+  private def createWithOptionalEmail(
+      username: String,
+      passwordHash: HashedPassword,
+      email: Option[EmailAddress],
+      blind: Boolean,
+      mustConfirmEmail: Boolean,
+      lang: Option[String],
+  ): Fu[Option[User]] =
     !nameExists(username) flatMap {
       _ ?? {
         val doc = newUser(username, passwordHash, email, blind, mustConfirmEmail, lang) ++
@@ -597,10 +615,10 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
       ReadPreference.secondaryPreferred,
     )
 
-  private def newUser(
+  private[user] def newUser(
       username: String,
       passwordHash: HashedPassword,
-      email: EmailAddress,
+      email: Option[EmailAddress],
       blind: Boolean,
       mustConfirmEmail: Boolean,
       lang: Option[String],
@@ -608,7 +626,7 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
 
     implicit def countHandler = Count.countBSONHandler
 
-    val normalizedEmail = email.normalize
+    val normalizedEmail = email.map(_.normalize)
     $doc(
       F.id               -> normalize(username),
       F.username         -> username,
@@ -623,7 +641,7 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
       F.playTime         -> User.PlayTime(0, 0),
       F.lang             -> lang,
     ) ++ {
-      (email.value != normalizedEmail.value) ?? $doc(F.verbatimEmail -> email)
+      $doc(F.verbatimEmail -> email.filter(e => e.value != e.normalize.value))
     } ++ {
       if (blind) $doc("blind" -> true) else $empty
     }

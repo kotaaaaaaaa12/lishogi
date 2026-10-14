@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {buildConfiguration} from '../runtime/config.mjs';
 
 const env = {
-  PUBLIC_ORIGIN: 'https://shogi.test', MAIL_FROM: 'noreply@shogi.test',
+  PUBLIC_ORIGIN: 'https://shogi.test',
   PLAY_SECRET: 'a'.repeat(64), USER_PASSWORD_SECRET: Buffer.alloc(32, 1).toString('base64'),
   SHOGINET_KEY: 'c'.repeat(64), CONTAINER_CONTROL_TOKEN: 'd'.repeat(64),
 };
@@ -12,7 +12,13 @@ test('placeholder domains, insecure origins and missing secrets are rejected', (
   assert.throws(() => buildConfiguration({...env, PUBLIC_ORIGIN: 'http://shogi.test'}), /PUBLIC_ORIGIN/);
   assert.throws(() => buildConfiguration({...env, PUBLIC_ORIGIN: 'https://shogi.example.com'}), /PUBLIC_ORIGIN/);
   assert.throws(() => buildConfiguration({...env, PLAY_SECRET: 'short'}), /PLAY_SECRET/);
-  assert.throws(() => buildConfiguration({...env, MAIL_FROM: 'noreply@example.com'}), /MAIL_FROM/);
+});
+
+test('the server boots without a sender or an email provider configuration', () => {
+  const config = buildConfiguration(env);
+  assert.match(config.app, /security\.email_confirm\.enabled = false/);
+  assert.match(config.app, /mailgun\.api\.url = ""/);
+  assert.doesNotMatch(config.app, /cf\.mail|@/);
 });
 
 test('password encryption requires a canonical Base64 AES key, not a hex token', () => {

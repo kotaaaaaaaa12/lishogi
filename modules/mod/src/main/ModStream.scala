@@ -19,7 +19,7 @@ final class ModStream {
         Json.obj(
           "t"           -> "signup",
           "username"    -> user.username,
-          "email"       -> email.value,
+          "email"       -> email.map(_.value),
           "ip"          -> HTTPRequest.lastRemoteAddress(req).value,
           "suspIp"      -> suspIp,
           "userAgent"   -> HTTPRequest.userAgent(req),

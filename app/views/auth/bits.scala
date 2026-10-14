@@ -16,7 +16,7 @@ object bits {
       implicit ctx: Context,
   ) =
     frag(
-      form3.group(username, if (register) trans.username() else trans.usernameOrEmail()) { f =>
+      form3.group(username, trans.username()) { f =>
         frag(
           form3.input(f)(autofocus, required, autocomplete := "username"),
           p(cls := "error username-exists none")(trans.usernameAlreadyUsed()),

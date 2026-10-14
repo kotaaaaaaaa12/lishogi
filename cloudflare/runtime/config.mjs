@@ -14,10 +14,6 @@ export function buildConfiguration(env) {
   if (passwordKey.length !== 32 || passwordKey.toString('base64') !== env.USER_PASSWORD_SECRET) {
     throw new Error('USER_PASSWORD_SECRET must be the Base64 encoding of a 32-byte AES key.');
   }
-  if (!env.MAIL_FROM || !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(env.MAIL_FROM)
-      || env.MAIL_FROM.endsWith('@example.com')) {
-    throw new Error('Configure MAIL_FROM using your verified Cloudflare Email Sending domain.');
-  }
   const q = JSON.stringify;
   // Load packaged defaults explicitly; a relative include would reload this generated file.
   const app = `include required(classpath("application.conf"))
@@ -31,7 +27,7 @@ net.base_url = ${q(origin.origin)}
 net.asset.domain = ${q(origin.host)}
 net.asset.base_url = ${q(origin.origin)}
 net.socket.domains = [${q(origin.host)}]
-net.email = ${q(env.MAIL_FROM)}
+net.email = ""
 net.crawlable = false
 play.http.secret.key = ${q(env.PLAY_SECRET)}
 play.http.session.secure = true
@@ -39,16 +35,17 @@ play.http.session.httpOnly = true
 user.password.bpass.secret = ${q(env.USER_PASSWORD_SECRET)}
 security.password_reset.secret = ${q(env.PLAY_SECRET + ':password-reset')}
 security.email_confirm.secret = ${q(env.PLAY_SECRET + ':email-confirm')}
-security.email_confirm.enabled = true
+security.email_confirm.enabled = false
 security.email_change.secret = ${q(env.PLAY_SECRET + ':email-change')}
 security.login_token.secret = ${q(env.PLAY_SECRET + ':login-token')}
 storm.secret = ${q(env.PLAY_SECRET + ':storm')}
 api.token = ${q(env.PLAY_SECRET + ':api')}
 redis.uri = "redis://localhost:6379"
-mailgun.api.url = "http://cf.mail"
-mailgun.api.key = ${q(env.CONTAINER_CONTROL_TOKEN)}
-mailgun.sender = ${q(env.MAIL_FROM)}
-mailgun.reply_to = ${q(env.MAIL_FROM)}
+mailgun.api.url = ""
+mailgun.api.key = ""
+mailgun.sender = ""
+mailgun.reply_to = ""
+security.mailgun.api.url = ""
 shoginet.anon_mode = false
 play.server.http.address = "127.0.0.1"
 play.server.http.port = 9663
@@ -87,6 +84,7 @@ http {
     server_name _;
     client_max_body_size 10m;
     location ^~ /_cf {return 404;}
+    location ~ ^/(?:password/reset|auth/magic-link|account/(?:email|reopen)|api/account/email|signup/(?:check-your-email|fix-email|confirm)|contact/email-confirm/help)(?:/|$) {return 410;}
     location ~ ^/assets/(?:_[^/]+/)?(.+)$ {
       alias /opt/lishogi/public-prod/$1;
       add_header Cross-Origin-Opener-Policy same-origin always;

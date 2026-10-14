@@ -25,8 +25,7 @@ object contact {
       s"$prefix-reopen",
       wantReopen(),
       frag(
-        p(a(href := routes.Account.reopen)(reopenOnThisPage())),
-        p(doNotAskByEmailToReopen()),
+        p("Automatic account reopening is unavailable. Contact a site moderator."),
       ),
     )
 
@@ -53,33 +52,23 @@ object contact {
           iCantLogIn(),
           List(
             Leaf(
-              "email-confirm",
-              noConfirmationEmail(),
-              p(
-                a(href := routes.Account.emailConfirmHelp)(visitThisPage()),
-                ".",
-              ),
-            ),
-            Leaf(
               "forgot-password",
               forgotPassword(),
               p(
-                a(href := routes.Auth.passwordReset)(visitThisPage()),
-                ".",
+                "Email-based password recovery is unavailable on this site.",
               ),
             ),
             Leaf(
               "forgot-username",
               forgotUsername(),
               p(
-                a(href := routes.Auth.login)(youCanLoginWithEmail()),
-                ".",
+                "Sign in with the username you chose at registration.",
               ),
             ),
             Leaf(
               "lost-2fa",
               lost2FA(),
-              p(a(href := routes.Auth.passwordReset)(doPasswordReset()), "."),
+              p("Use your authenticator to sign in. Email-based two-factor recovery is unavailable."),
             ),
             reopenLeaf("login"),
             Leaf(
@@ -293,7 +282,7 @@ object contact {
                   ".",
                 ),
                 p(
-                  s"Then send us an email at $contactEmail to request the definitive erasure of all data linked to the account.",
+                  "Contact a site moderator to request the erasure of personal account data.",
                 ),
                 p(
                   "Note that games are facts, not personal information. And as such they are never deleted.",
@@ -304,7 +293,7 @@ object contact {
               "contact-other",
               noneOfTheAbove(),
               frag(
-                p(sendEmailAt(contactEmail)),
+                p("Contact a site moderator through the discussion forum."),
                 p(explainYourRequest()),
               ),
             ),

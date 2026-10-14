@@ -2,7 +2,7 @@
 
 This overlay preserves the full upstream Lishogi source and adds deployment infrastructure for its primary services. It does not replace Lishogi with a new shogi game.
 
-**The full migration is unfinished.** This is a reviewable implementation checkpoint, not a tested production release. Worker bundling and focused JavaScript tests pass. The complete Docker build, multiplayer, AI gameplay, email delivery and recovery on Cloudflare have not been verified. This environment has no Docker CLI; the attempted complete image dry run stopped for that reason. Upstream Scala tests also stopped because sbt could not open its boot-server Unix socket in this environment.
+**The full migration is unfinished.** This is a reviewable implementation checkpoint, not a tested production release. Worker bundling and focused JavaScript tests pass. The complete Docker build, multiplayer, AI gameplay and recovery on Cloudflare have not been verified. This environment has no Docker CLI; the attempted complete image dry run stopped for that reason. Use -Dsbt.server.forcestart=true and -Dsbt.server.autostart=false for local sbt verification in this environment.
 
 ## Implemented infrastructure
 
@@ -14,30 +14,30 @@ This overlay preserves the full upstream Lishogi source and adds deployment infr
 | Application data | Original MongoDB APIs, single-node replica set |
 | Backup and restart restoration | Private R2 bucket, MongoDB logical archives |
 | AI computation | Shoginet, YaneuraOu and largeboard Fairy-Stockfish |
-| Authentication email bridge | Cloudflare Email Sending |
+| Account registration | Username and password only; no email collection or sending |
 | Runtime location | One APAC Container |
 
-The baseline and companion source commits are pinned in `UPSTREAM.json` and `Dockerfile`. No game-rule source or existing feature module is overwritten. D1 is not used: retaining MongoDB avoids rewriting the 160 upstream files with direct ReactiveMongo imports.
+The baseline and companion source commits are pinned in `UPSTREAM.json` and `Dockerfile`. Game-rule source remains unchanged. Registration and authentication now use usernames and passwords without collecting email addresses. D1 is not used: retaining MongoDB avoids rewriting the 160 upstream files with direct ReactiveMongo imports.
 
-The default `standard-4` instance has four vCPUs and 12 GiB memory. It stays running for background timers, tournaments and active games. Running costs must be evaluated before deployment. This version does not implement ten-minute idle shutdown or autoscaling.
+The configured `standard-2` instance has one vCPU and 6 GiB memory. It stops after ten minutes of SDK idle time following a successful final backup. Open HTTP streams and WebSockets prevent idle expiry. Final backup failure defers shutdown to preserve data. Periodic backups do not renew the public inactivity timer or restart a stopped container.
 
 ## Apply to a fork
 
 1. Fork `https://github.com/WandererXII/lishogi`. The inspected baseline is commit `5394fc3dd868de1442ea24ecd87cdf065dea2f33`.
 2. Extract this overlay into the root of the fork. It adds `cloudflare/`, `.dockerignore` and `wrangler.jsonc`, pins pnpm 10.11.1 and the deployment dependencies in the upstream root `package.json`, and refreshes `pnpm-lock.yaml` to match the pinned upstream workspace manifests. If your fork already has changes to that manifest, merge this field instead of replacing the file. When updating an existing installation, preserve your configured `wrangler.jsonc`.
-3. Set `PUBLIC_ORIGIN` in `wrangler.jsonc` to your real HTTPS origin, without a path, query or nonstandard port. Set `MAIL_FROM` to your verified sender address.
+3. Set `PUBLIC_ORIGIN` in `wrangler.jsonc` to your real HTTPS origin, without a path, query or nonstandard port.
 4. Enable Containers on Workers Paid. Create a **private** R2 bucket named `lishogi-backups`, or update the bucket binding to your own name.
-5. Onboard your domain in **Email Service > Email Sending**. Ordinary Email Routing alone is insufficient for unrestricted authentication emails.
+5. Registration uses a username and password. Email-based login, password recovery, email changes and account reopening are disabled. No email provider setup is required.
 6. To manage the custom domain in `wrangler.jsonc`, uncomment the `routes` example and replace its pattern with the real hostname from `PUBLIC_ORIGIN`. Alternatively, retain your existing Worker custom domain.
 7. Configure four distinct Worker secrets: `CONTAINER_CONTROL_TOKEN`, `PLAY_SECRET`, `USER_PASSWORD_SECRET` and `SHOGINET_KEY`. Generate the password key with `node cloudflare/generate-secret.mjs --password`; generate each other secret separately with `node cloudflare/generate-secret.mjs`. Do not commit secret values. The password key must be a Base64-encoded 32-byte AES key, not a hex token.
 
 Keep `USER_PASSWORD_SECRET` stable across updates: it is part of password verification. Keep `PLAY_SECRET` stable to preserve sessions and signed links.
 
-To update an existing alpha installation, copy `package.json`, `pnpm-lock.yaml` and `cloudflare/` from this ZIP into the existing fork. Merge the configuration changes into your existing `wrangler.jsonc`, preserving your real domain, sender and bucket bindings. The new `$schema` points at the root-installed Wrangler, and `secrets.required` declares the four existing secret names. Retain their values.
+To update an existing alpha installation, copy `package.json`, `pnpm-lock.yaml` and `cloudflare/` from this ZIP into the existing fork. Merge the configuration changes into your existing `wrangler.jsonc`, preserving your real domain and bucket bindings. The new `$schema` points at the root-installed Wrangler, and `secrets.required` declares the four existing secret names. Retain their values.
 
 ## Configuration and Workers Builds
 
-`wrangler.jsonc` contains the public runtime variables (`PUBLIC_ORIGIN`, `MAIL_FROM`, `BACKUP_INTERVAL_SECONDS`), the required secret names, Container sizing and region, R2 and email bindings, and the optional custom-domain route. Set the two example addresses to your real origin and verified sender.
+`wrangler.jsonc` contains the public runtime variables (`PUBLIC_ORIGIN`, `BACKUP_INTERVAL_SECONDS`), the required secret names, Container sizing and region, R2 binding, and the optional custom-domain route. Set the public origin to your site address.
 
 Secret values remain Worker secrets. Their names are declared in `secrets.required`, so Wrangler can report missing credentials before deployment. Keep existing values across updates. Do not copy them into a public repository.
 
@@ -106,7 +106,7 @@ The dry run with `--containers-rollout=none` checks the Worker bundle and config
 
 `verify-image.sh` requires Docker. It builds the full image, checks application startup and a versioned asset, requests a database backup and runs the upstream Shoginet engine tests. It does not verify real Cloudflare behavior.
 
-The next integration checks are two independent browsers completing online games; all AI difficulties; account verification, login, logout and password reset; persistent sessions; shogi-specific illegal moves, repetition, perpetual check and entering-king outcomes; tournaments; studies; spectators; and restart recovery. Recovery tests must include writes made both before and after a backup so the current data-loss window is visible.
+The next integration checks are two independent browsers completing online games; all AI difficulties; username/password registration, login, logout and authenticated password changes; persistent sessions; shogi-specific illegal moves, repetition, perpetual check and entering-king outcomes; tournaments; studies; spectators; and restart recovery. Recovery tests must include writes made both before and after a backup so the current data-loss window is visible.
 
 ## License and source references
 
@@ -121,5 +121,3 @@ Official documentation checked on October 8, 2026:
 - https://developers.cloudflare.com/containers/guides/snapshots/
 - https://developers.cloudflare.com/containers/concepts/placement/
 - https://developers.cloudflare.com/containers/configuration/workers-connections/
-- https://developers.cloudflare.com/email-service/api/send-emails/workers-api/
-- https://developers.cloudflare.com/email-service/get-started/send-emails/

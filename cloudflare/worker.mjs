@@ -1,11 +1,11 @@
 import {Container, ContainerProxy} from '@cloudflare/containers';
 import {loadBackup, publishBackup, publicRequest} from './persistence.mjs';
-import {handleMail} from './mail.mjs';
+import {emailServiceDisabled, emailDisabledResponse} from './auth-policy.mjs';
 import {waitForStartup, startupResponse, fetchWithRetry} from './readiness.mjs';
 
 export {ContainerProxy};
 
-const RELEASE = 'standard2-idle-stream-20261014-v3';
+const RELEASE = 'standard2-no-email-20261014-v4';
 
 export class LishogiServer extends Container {
   defaultPort = 8080;
@@ -27,7 +27,6 @@ export class LishogiServer extends Container {
       PLAY_SECRET: env.PLAY_SECRET || '',
       USER_PASSWORD_SECRET: env.USER_PASSWORD_SECRET || '',
       SHOGINET_KEY: env.SHOGINET_KEY || '',
-      MAIL_FROM: env.MAIL_FROM || '',
     };
   }
 
@@ -188,6 +187,7 @@ export class LishogiServer extends Container {
   async fetch(request) {
     const forwarded = publicRequest(request, this.env.PUBLIC_ORIGIN);
     if (!forwarded) return new Response('Not found', {status: 404});
+    if (emailServiceDisabled(new URL(request.url).pathname)) return emailDisabledResponse();
     if (new URL(request.url).pathname === '/healthz') {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         return new Response('Method not allowed', {status: 405, headers: {allow: 'GET, HEAD'}});
@@ -207,12 +207,11 @@ export class LishogiServer extends Container {
   }
 }
 
-LishogiServer.outboundByHost = {'cf.mail': handleMail};
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/_cf')) return new Response('Not found', {status: 404});
+    if (emailServiceDisabled(url.pathname)) return emailDisabledResponse();
     const origin = new URL(env.PUBLIC_ORIGIN);
     if (url.host !== origin.host) {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
