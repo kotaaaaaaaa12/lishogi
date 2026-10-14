@@ -1,21 +1,22 @@
 import {Container, ContainerProxy} from '@cloudflare/containers';
 import {loadBackup, publishBackup, publicRequest} from './persistence.mjs';
 import {handleMail} from './mail.mjs';
-import {waitForStartup, startupResponse} from './readiness.mjs';
+import {waitForStartup, startupResponse, fetchWithRetry} from './readiness.mjs';
 
 export {ContainerProxy};
 
-const RELEASE = 'standard2-startup-20261014-v2';
+const RELEASE = 'standard2-idle-stream-20261014-v3';
 
 export class LishogiServer extends Container {
   defaultPort = 8080;
-  sleepAfter = '24h';
+  sleepAfter = '10m';
   enableInternet = true;
   bootPromise;
   backupPromise;
   startupStage = 'idle';
   applicationReady = false;
   startupWaitMilliseconds = 10_000;
+  shutdownPromise;
 
   constructor(ctx, env) {
     super(ctx, env);
@@ -38,7 +39,9 @@ export class LishogiServer extends Container {
   control(path, init = {}) {
     const headers = new Headers(init.headers);
     headers.set('x-container-control', this.env.CONTAINER_CONTROL_TOKEN);
-    return this.containerFetch(new Request(`http://container/_cf/${path}`, {...init, headers}));
+    // Background control operations must not reset the public inactivity timer.
+    // The container is started and its port checked by boot() before this call.
+    return this.container.getTcpPort(8080).fetch(new Request(`http://container/_cf/${path}`, {...init, headers}));
   }
 
   async ensureReady() {
@@ -135,23 +138,52 @@ export class LishogiServer extends Container {
   }
 
   async checkpoint() {
+    if (!this.container.running) {
+      this.deleteSchedules('checkpoint');
+      return;
+    }
     try {
-      await this.ensureReady();
-      await this.saveBackup();
-      await this.renewActivityTimeout();
+      if (this.applicationReady && !this.shutdownPromise) await this.saveBackup();
     } finally {
-      await this.armCheckpoint();
+      if (this.container.running && !this.shutdownPromise) await this.armCheckpoint();
     }
   }
 
   async onActivityExpired() {
-    // Lishogi runs background timers and active games. Keep the full server alive.
-    await this.saveBackup();
-    await this.renewActivityTimeout();
+    if (!this.container.running) return;
+    if (!this.shutdownPromise) {
+      this.shutdownPromise = (async () => {
+        try {
+          // Refuse to discard the ephemeral database if the final backup fails.
+          await this.ensureReady();
+          await this.saveBackup();
+          this.deleteSchedules('checkpoint');
+          this.applicationReady = false;
+          this.stage('idle-shutdown');
+          console.info('Lishogi idle shutdown: final backup committed.', RELEASE);
+          const exited = this.container.monitor();
+          await this.stop();
+          await exited;
+        } catch (error) {
+          console.error('Lishogi idle shutdown deferred: backup or stop failed.', RELEASE, error.message);
+          this.bootPromise = undefined;
+          if (this.container.running) await this.armCheckpoint();
+          throw error;
+        }
+      })();
+    }
+    try {await this.shutdownPromise;}
+    finally {this.shutdownPromise = undefined;}
   }
 
-  async onStop() {this.bootPromise = undefined; this.applicationReady = false; this.stage('stopped');}
-  async onError() {this.bootPromise = undefined; this.applicationReady = false; this.stage('container-error');}
+  async onStop() {
+    this.deleteSchedules('checkpoint');
+    this.bootPromise = undefined; this.applicationReady = false; this.stage('stopped');
+  }
+  async onError() {
+    this.deleteSchedules('checkpoint');
+    this.bootPromise = undefined; this.applicationReady = false; this.stage('container-error');
+  }
 
   async fetch(request) {
     const forwarded = publicRequest(request, this.env.PUBLIC_ORIGIN);
@@ -164,6 +196,10 @@ export class LishogiServer extends Container {
         status: this.applicationReady ? 200 : 503, headers: {'cache-control': 'no-store'},
       });
     }
+    if (this.shutdownPromise && !await waitForStartup(this.shutdownPromise, this.startupWaitMilliseconds)) {
+      return startupResponse('idle-shutdown', RELEASE);
+    }
+    this.renewActivityTimeout();
     if (!await waitForStartup(this.ensureReady(), this.startupWaitMilliseconds)) {
       return startupResponse(this.startupStage, RELEASE);
     }
@@ -188,7 +224,7 @@ export default {
     }
     try {
       const id = env.LISHOGI.idFromName('primary-v1');
-      return await env.LISHOGI.get(id, {locationHint: 'apac'}).fetch(request);
+      return await fetchWithRetry(request, env.LISHOGI, id);
     } catch (error) {
       console.error('Lishogi request failed:', error.message);
       return startupResponse('request-failed', RELEASE);

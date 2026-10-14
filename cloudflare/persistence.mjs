@@ -1,6 +1,36 @@
 const PREFIX = 'lishogi/v1/';
 const MANIFEST = `${PREFIX}latest.json`;
 
+async function copyArchive(source, destination, signal) {
+  const reader = source.getReader();
+  const writer = destination.getWriter();
+  const cancel = () => {
+    void reader.cancel(signal.reason).catch(() => {});
+    void writer.abort(signal.reason).catch(() => {});
+  };
+  signal.addEventListener('abort', cancel, {once: true});
+  try {
+    signal.throwIfAborted();
+    while (true) {
+      const {done, value} = await reader.read();
+      signal.throwIfAborted();
+      if (done) break;
+      // Native IdentityTransformStream -> FixedLengthStream pipeTo is unsupported.
+      // Await each write to retain backpressure without buffering the archive.
+      await writer.write(value);
+    }
+    await writer.close();
+  } catch (error) {
+    void reader.cancel(error).catch(() => {});
+    void writer.abort(error).catch(() => {});
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    reader.releaseLock();
+    writer.releaseLock();
+  }
+}
+
 export async function loadBackup(bucket) {
   const manifestObject = await bucket.get(MANIFEST);
   if (!manifestObject) return null;
@@ -31,7 +61,7 @@ export async function publishBackup(bucket, response, now = Date.now()) {
   // Container proxy streams do not retain a runtime-known length for R2.
   const {readable, writable} = new FixedLengthStream(size);
   const abort = new AbortController();
-  const transfer = response.body.pipeTo(writable, {signal: abort.signal});
+  const transfer = copyArchive(response.body, writable, abort.signal);
   let archive;
   try {
     [archive] = await Promise.all([
