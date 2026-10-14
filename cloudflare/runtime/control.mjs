@@ -129,15 +129,20 @@ async function initialize() {
 
 async function backup(response) {
   if (!ready) throw new Error('Cannot back up an uninitialized application.');
+  log('Backup database dump started.');
   await run('mongodump', ['--uri', mongoUri, `--archive=${backupPath}`, '--gzip', '--oplog', '--quiet']);
   const info = await stat(backupPath);
   if (!info.size || info.size > maxArchiveSize) throw new Error('Backup archive exceeds the supported size.');
   const digest = await hashFile(backupPath);
+  log(`Backup archive prepared: ${info.size} bytes.`);
   response.writeHead(200, {
     'content-type': 'application/gzip', 'content-length': info.size,
     'x-backup-sha256': digest, 'cache-control': 'no-store',
   });
-  try {await pipeline(createReadStream(backupPath), response);}
+  try {
+    await pipeline(createReadStream(backupPath), response);
+    log('Backup archive transfer completed.');
+  }
   finally {await rm(backupPath, {force: true});}
 }
 

@@ -1,10 +1,11 @@
 import {Container, ContainerProxy} from '@cloudflare/containers';
 import {loadBackup, publishBackup, publicRequest} from './persistence.mjs';
 import {handleMail} from './mail.mjs';
+import {waitForStartup, startupResponse} from './readiness.mjs';
 
 export {ContainerProxy};
 
-const RELEASE = 'standard2-r2-20261014-v1';
+const RELEASE = 'standard2-startup-20261014-v2';
 
 export class LishogiServer extends Container {
   defaultPort = 8080;
@@ -12,6 +13,9 @@ export class LishogiServer extends Container {
   enableInternet = true;
   bootPromise;
   backupPromise;
+  startupStage = 'idle';
+  applicationReady = false;
+  startupWaitMilliseconds = 10_000;
 
   constructor(ctx, env) {
     super(ctx, env);
@@ -26,6 +30,11 @@ export class LishogiServer extends Container {
     };
   }
 
+  stage(value) {
+    this.startupStage = value;
+    console.info('Lishogi startup stage:', value, RELEASE);
+  }
+
   control(path, init = {}) {
     const headers = new Headers(init.headers);
     headers.set('x-container-control', this.env.CONTAINER_CONTROL_TOKEN);
@@ -35,46 +44,61 @@ export class LishogiServer extends Container {
   async ensureReady() {
     if (!this.env.CONTAINER_CONTROL_TOKEN || !this.env.PLAY_SECRET
         || !this.env.USER_PASSWORD_SECRET || !this.env.SHOGINET_KEY) {
+      this.stage('missing-secrets');
       throw new Error('Required secrets have not been configured.');
     }
     if (!this.bootPromise) {
       this.bootPromise = this.boot().catch(error => {
         this.bootPromise = undefined;
+        this.applicationReady = false;
+        console.error('Lishogi startup failed at stage:', this.startupStage, RELEASE, error.message);
+        this.stage('failed');
         throw error;
       });
+      // Keep startup independent of the first browser request or disconnect.
+      this.ctx.waitUntil(this.bootPromise.catch(() => {}));
     }
     await this.bootPromise;
   }
 
   async boot() {
+    this.stage('container-port');
     await this.startAndWaitForPorts({
       ports: [8080], cancellationOptions: {waitInterval: 1000, instanceGetTimeoutMS: 120_000, portReadyTimeoutMS: 180_000},
     });
+    this.stage('container-status');
     const statusResponse = await this.control('status');
     if (!statusResponse.ok) throw new Error('Container control service is unavailable.');
     const status = await statusResponse.json();
     if (!status.ready) {
+      this.stage('backup-load');
       const backup = await loadBackup(this.env.BACKUPS);
       const previouslyInitialized = await this.ctx.storage.get('initialized');
       if (!backup && previouslyInitialized) {
         throw new Error('A previously initialized server has no committed backup. Refusing to create an empty database.');
       }
       if (backup) {
+        this.stage('database-restore');
         const restored = await this.control('restore', {
           method: 'POST', body: backup.archive.body,
           headers: {'content-type': 'application/gzip', 'x-backup-sha256': backup.manifest.sha256},
         });
         if (!restored.ok) throw new Error(`Database restore failed: HTTP ${restored.status}`);
       }
+      this.stage('application-initialize');
       const started = await this.control('initialize', {method: 'POST'});
       if (!started.ok) throw new Error(`Application startup failed: HTTP ${started.status}`);
     }
     if (!await this.ctx.storage.get('initialized')) {
+      this.stage('initial-backup');
       await this.saveBackup();
       await this.ctx.storage.put('initialized', true);
     }
     console.info('Lishogi startup and initial backup completed:', RELEASE);
+    this.stage('checkpoint-schedule');
     await this.armCheckpoint();
+    this.applicationReady = true;
+    this.stage('ready');
   }
 
   backupInterval() {
@@ -86,9 +110,11 @@ export class LishogiServer extends Container {
     if (!this.backupPromise) {
       this.backupPromise = (async () => {
         const response = await this.control('backup', {method: 'POST'});
+        console.info('Lishogi backup archive response:', response.status, RELEASE);
         let manifest;
         try {
           manifest = await publishBackup(this.env.BACKUPS, response);
+          console.info('Lishogi R2 backup committed:', manifest.size, RELEASE);
         } catch (error) {
           throw new Error(`R2 backup publication failed (${RELEASE}): ${error.message}`, {cause: error});
         }
@@ -124,13 +150,23 @@ export class LishogiServer extends Container {
     await this.renewActivityTimeout();
   }
 
-  async onStop() {this.bootPromise = undefined;}
-  async onError() {this.bootPromise = undefined;}
+  async onStop() {this.bootPromise = undefined; this.applicationReady = false; this.stage('stopped');}
+  async onError() {this.bootPromise = undefined; this.applicationReady = false; this.stage('container-error');}
 
   async fetch(request) {
     const forwarded = publicRequest(request, this.env.PUBLIC_ORIGIN);
     if (!forwarded) return new Response('Not found', {status: 404});
-    await this.ensureReady();
+    if (new URL(request.url).pathname === '/healthz') {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return new Response('Method not allowed', {status: 405, headers: {allow: 'GET, HEAD'}});
+      }
+      return Response.json({ready: this.applicationReady, stage: this.startupStage, release: RELEASE}, {
+        status: this.applicationReady ? 200 : 503, headers: {'cache-control': 'no-store'},
+      });
+    }
+    if (!await waitForStartup(this.ensureReady(), this.startupWaitMilliseconds)) {
+      return startupResponse(this.startupStage, RELEASE);
+    }
     return this.containerFetch(forwarded);
   }
 }
@@ -155,9 +191,7 @@ export default {
       return await env.LISHOGI.get(id, {locationHint: 'apac'}).fetch(request);
     } catch (error) {
       console.error('Lishogi request failed:', error.message);
-      return Response.json({error: 'The server is starting or temporarily unavailable.'}, {
-        status: 503, headers: {'retry-after': '15', 'cache-control': 'no-store'},
-      });
+      return startupResponse('request-failed', RELEASE);
     }
   },
 };
