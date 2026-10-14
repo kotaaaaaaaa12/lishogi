@@ -73,7 +73,7 @@ storm.secret = ${q(env.PLAY_SECRET + ':storm')}
   const nginx = `daemon off;
 worker_processes 2;
 pid /run/lishogi/nginx.pid;
-error_log /dev/stderr warn;
+error_log stderr warn;
 events {worker_connections 2048;}
 http {
   include /etc/nginx/mime.types;
@@ -86,11 +86,6 @@ http {
     listen 127.0.0.1:8082;
     server_name _;
     client_max_body_size 10m;
-    proxy_set_header Host ${origin.host};
-    proxy_set_header X-Forwarded-Host ${origin.host};
-    proxy_set_header X-Forwarded-Proto https;
-    proxy_set_header X-Forwarded-For $http_x_forwarded_for;
-    proxy_set_header X-Real-IP $http_x_real_ip;
     location ^~ /_cf {return 404;}
     location ~ ^/assets/(?:_[^/]+/)?(.+)$ {
       alias /opt/lishogi/public-prod/$1;
@@ -101,6 +96,11 @@ http {
     location / {
       proxy_pass http://127.0.0.1:$application_port;
       proxy_http_version 1.1;
+      proxy_set_header Host ${origin.host};
+      proxy_set_header X-Forwarded-Host ${origin.host};
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+      proxy_set_header X-Real-IP $http_x_real_ip;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection $connection_upgrade;
       proxy_buffering off;
