@@ -71,7 +71,7 @@ storm.secret = ${q(env.PLAY_SECRET + ':storm')}
     },
   };
   const nginx = `daemon off;
-worker_processes 2;
+worker_processes 1;
 pid /run/lishogi/nginx.pid;
 error_log stderr warn;
 events {worker_connections 2048;}

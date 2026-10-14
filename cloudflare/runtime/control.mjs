@@ -75,11 +75,11 @@ async function bootDatabases() {
   await mkdir('/run/lishogi', {recursive: true});
   start('mongod', [
     '--dbpath', '/data/mongo', '--bind_ip', '127.0.0.1', '--replSet', 'rs0',
-    '--wiredTigerCacheSizeGB', '1', '--oplogSize', '512', '--quiet',
+    '--wiredTigerCacheSizeGB', '0.5', '--oplogSize', '512', '--quiet',
   ]);
   start('redis-server', [
     '--bind', '127.0.0.1', '--protected-mode', 'yes', '--dir', '/data/redis',
-    '--appendonly', 'no', '--save', '', '--maxmemory', '512mb', '--maxmemory-policy', 'noeviction',
+    '--appendonly', 'no', '--save', '', '--maxmemory', '256mb', '--maxmemory-policy', 'noeviction',
   ]);
   await waitPort(27017);
   await waitPort(6379);
@@ -108,10 +108,10 @@ async function initialize() {
     lishogi.game5.createIndex({'p.uid': 1, ca: -1});
   `]);
   start('/opt/lishogi/app/bin/lila', [
-    '-Dconfig.file=/run/lishogi/application.conf', '-J-Xms256m', '-J-Xmx3g',
+    '-Dconfig.file=/run/lishogi/application.conf', '-J-Xms128m', '-J-Xmx2g',
   ], {cwd: '/opt/lishogi/app'});
   start('/opt/lila-ws/bin/lila-ws', [
-    '-Dconfig.file=/run/lishogi/socket.conf', '-J-Xms64m', '-J-Xmx512m',
+    '-Dconfig.file=/run/lishogi/socket.conf', '-J-Xms32m', '-J-Xmx384m',
   ], {cwd: '/opt/lila-ws'});
   await waitPort(9663);
   await waitPort(9664);
@@ -122,7 +122,7 @@ async function initialize() {
   if (response.status >= 500) throw new Error(`Lishogi startup returned HTTP ${response.status}.`);
   start('nginx', ['-c', '/run/lishogi/nginx.conf']);
   await waitPort(8082);
-  start(process.execPath, ['--import', 'tsx', 'src/main.ts'], {cwd: '/opt/shoginet'});
+  start(process.execPath, ['--max-old-space-size=256', '--import', 'tsx', 'src/main.ts'], {cwd: '/opt/shoginet'});
   ready = true;
   log('Application services are ready.');
 }

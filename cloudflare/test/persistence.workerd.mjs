@@ -15,7 +15,9 @@ function backupResponse(length, declared = 7) {
     'content-length': String(declared), 'x-backup-sha256': 'b'.repeat(64),
   }});
 }
-export default {async fetch(request, env) {
+export class BackupVerifier extends DurableObject {
+ async fetch(request) {
+  const env = this.env;
   const scenario = new URL(request.url).pathname.slice(1);
   try {
     if (scenario === 'raw-stream') {
@@ -54,12 +56,15 @@ export default {async fetch(request, env) {
   } catch (error) {
     return Response.json({error: error.message}, {status: 500});
   }
+}}
+export default {fetch(request, env) {
+  return env.VERIFIER.get(env.VERIFIER.idFromName("test")).fetch(request);
 }};
 `;
 
 async function verify(source) {
-  const mf = new Miniflare(convertV4MiniflareOptions({modules: true, script: source + worker,
-    compatibilityDate: '2026-10-08', r2Buckets: ['BACKUPS']}));
+  const mf = new Miniflare(convertV4MiniflareOptions({modules: true, script: 'import {DurableObject} from "cloudflare:workers";\n' + source + worker,
+    compatibilityDate: '2026-10-08', r2Buckets: ['BACKUPS'], durableObjects: {VERIFIER: {className: 'BackupVerifier', useSQLite: true}}}));
   try {
     const call = async scenario => {
       const response = await mf.dispatchFetch('https://test/' + scenario);

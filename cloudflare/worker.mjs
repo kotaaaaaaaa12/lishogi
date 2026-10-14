@@ -4,6 +4,8 @@ import {handleMail} from './mail.mjs';
 
 export {ContainerProxy};
 
+const RELEASE = 'standard2-r2-20261014-v1';
+
 export class LishogiServer extends Container {
   defaultPort = 8080;
   sleepAfter = '24h';
@@ -13,6 +15,7 @@ export class LishogiServer extends Container {
 
   constructor(ctx, env) {
     super(ctx, env);
+    console.info('Lishogi runtime release:', RELEASE);
     this.envVars = {
       PUBLIC_ORIGIN: env.PUBLIC_ORIGIN,
       CONTAINER_CONTROL_TOKEN: env.CONTAINER_CONTROL_TOKEN || '',
@@ -70,6 +73,7 @@ export class LishogiServer extends Container {
       await this.saveBackup();
       await this.ctx.storage.put('initialized', true);
     }
+    console.info('Lishogi startup and initial backup completed:', RELEASE);
     await this.armCheckpoint();
   }
 
@@ -82,7 +86,12 @@ export class LishogiServer extends Container {
     if (!this.backupPromise) {
       this.backupPromise = (async () => {
         const response = await this.control('backup', {method: 'POST'});
-        const manifest = await publishBackup(this.env.BACKUPS, response);
+        let manifest;
+        try {
+          manifest = await publishBackup(this.env.BACKUPS, response);
+        } catch (error) {
+          throw new Error(`R2 backup publication failed (${RELEASE}): ${error.message}`, {cause: error});
+        }
         await this.ctx.storage.put('lastBackup', manifest);
         const history = await this.ctx.storage.get('backupHistory') || [];
         const keys = [...history.filter(key => key !== manifest.key), manifest.key];
