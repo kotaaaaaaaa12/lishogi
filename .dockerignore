@@ -1,0 +1,14 @@
+# Exclude host dependencies, caches and local credentials.
+**/.git
+**/node_modules
+**/target
+.cloudflare-build
+.wrangler
+**/.wrangler
+**/.dev.vars*
+**/.env
+**/.env.local
+**/.env.*.local
+conf/application.conf
+**/*.zip
+**/*.log
