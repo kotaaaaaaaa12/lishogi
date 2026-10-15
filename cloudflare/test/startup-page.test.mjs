@@ -10,8 +10,8 @@ test('browser navigation receives the Shogi waiting screen with a matching CSP n
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.match(response.headers.get('content-type'), /text\/html/);
   const html = await response.text();
-  assert.match(html, /<h1>Starting Shogi<\/h1>/);
-  assert.match(html, /Restoring saved data…/);
+  assert.match(html, /<h1 id="heading">Getting your board ready\.<\/h1>/);
+  assert.match(html, /Restoring saved games…/);
   assert.match(html, /fetch\('\/healthz'/);
   const nonce = html.match(/<script nonce="([a-f0-9]+)">/)[1];
   assert.ok(response.headers.get('content-security-policy').includes(`'nonce-${nonce}'`));
