@@ -1,11 +1,12 @@
 import {Container, ContainerProxy} from '@cloudflare/containers';
 import {loadBackup, publishBackup, publicRequest} from './persistence.mjs';
 import {emailServiceDisabled, emailDisabledResponse} from './auth-policy.mjs';
-import {waitForStartup, startupResponse, fetchWithRetry} from './readiness.mjs';
+import {waitForStartup, fetchWithRetry} from './readiness.mjs';
+import {starting} from './startup-page.mjs';
 
 export {ContainerProxy};
 
-const RELEASE = 'standard2-no-email-20261014-v4';
+const RELEASE = 'standard2-startup-screen-20261015-v5';
 
 export class LishogiServer extends Container {
   defaultPort = 8080;
@@ -192,18 +193,33 @@ export class LishogiServer extends Container {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         return new Response('Method not allowed', {status: 405, headers: {allow: 'GET, HEAD'}});
       }
-      return Response.json({ready: this.applicationReady, stage: this.startupStage, release: RELEASE}, {
+      if (!this.container.running && this.applicationReady) {
+        this.applicationReady = false;
+        this.bootPromise = undefined;
+        this.stage('stopped');
+      }
+      return Response.json({ready: this.applicationReady && !this.shutdownPromise, stage: this.startupStage, release: RELEASE}, {
         status: this.applicationReady ? 200 : 503, headers: {'cache-control': 'no-store'},
       });
     }
-    if (this.shutdownPromise && !await waitForStartup(this.shutdownPromise, this.startupWaitMilliseconds)) {
-      return startupResponse('idle-shutdown', RELEASE);
+    try {
+      if (this.shutdownPromise && !await waitForStartup(this.shutdownPromise, this.startupWaitMilliseconds)) {
+        return starting(request, 'idle-shutdown', RELEASE);
+      }
+      this.renewActivityTimeout();
+      if (!await waitForStartup(this.ensureReady(), this.startupWaitMilliseconds)) {
+        return starting(request, this.startupStage, RELEASE);
+      }
+      return await this.containerFetch(forwarded);
+    } catch (error) {
+      console.error('Lishogi request failed:', this.startupStage, error.message);
+      if (this.applicationReady) {
+        this.applicationReady = false;
+        this.bootPromise = undefined;
+        this.stage('request-failed');
+      }
+      return starting(request, this.startupStage, RELEASE);
     }
-    this.renewActivityTimeout();
-    if (!await waitForStartup(this.ensureReady(), this.startupWaitMilliseconds)) {
-      return startupResponse(this.startupStage, RELEASE);
-    }
-    return this.containerFetch(forwarded);
   }
 }
 
@@ -226,7 +242,7 @@ export default {
       return await fetchWithRetry(request, env.LISHOGI, id);
     } catch (error) {
       console.error('Lishogi request failed:', error.message);
-      return startupResponse('request-failed', RELEASE);
+      return starting(request, 'request-failed', RELEASE);
     }
   },
 };

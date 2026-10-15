@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {publicRequest} from '../persistence.mjs';
 import {waitForStartup, startupResponse, fetchWithRetry} from '../readiness.mjs';
 import {emailServiceDisabled, emailDisabledResponse} from '../auth-policy.mjs';
+import {starting} from '../startup-page.mjs';
 
 const source = await readFile(new URL('../worker.mjs', import.meta.url), 'utf8');
 // Execute the Worker handlers with the Cloudflare-only Container dependency mocked.
@@ -15,7 +16,7 @@ const context = vm.createContext({
     deleteSchedules() {}
   },
   ContainerProxy: class {}, publicRequest, waitForStartup, startupResponse, fetchWithRetry,
-  loadBackup() {}, publishBackup() {}, emailServiceDisabled, emailDisabledResponse,
+  loadBackup() {}, publishBackup() {}, emailServiceDisabled, emailDisabledResponse, starting,
   Request, Response, Headers, URL, console: {info() {}, error() {}},
 });
 new vm.Script(source.replace(/^import .*;\n/gm, '')
@@ -67,7 +68,9 @@ test('startup errors are reported and a later request can retry', async () => {
   let starts = 0;
   server.boot = async () => {if (++starts === 1) throw new Error('R2 unavailable');};
   server.containerFetch = async () => new Response('Board');
-  await assert.rejects(server.fetch(request()), /R2 unavailable/);
+  const failure = await server.fetch(request());
+  assert.equal(failure.status, 503);
+  assert.equal((await failure.json()).stage, 'failed');
   await Promise.all(background);
   assert.equal(server.startupStage, 'failed');
   assert.equal(await (await server.fetch(request())).text(), 'Board');
@@ -80,7 +83,7 @@ test('health reports startup state without starting or exposing secrets', async 
   const response = await server.fetch(new Request('https://shogi.what-the-fuck.men/healthz'));
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), {
-    ready: false, stage: 'idle', release: 'standard2-no-email-20261014-v4',
+    ready: false, stage: 'idle', release: 'standard2-startup-screen-20261015-v5',
   });
   server.applicationReady = true;
   server.stage('ready');
@@ -215,4 +218,60 @@ test('POST, overloads and ordinary application errors are never retried', async 
     await assert.rejects(fetchWithRetry(new Request(request().url, {method}), namespace, 'id'), /Failure/);
     assert.equal(attempts, 1);
   }
+});
+
+test('browser startup waits return HTML and continue one shared boot in the background', async () => {
+  const {server, background} = fixture();
+  let finish;
+  server.boot = async () => {
+    server.stage('application-initialize');
+    await new Promise(resolve => {finish = resolve;});
+  };
+  const result = await server.fetch(new Request(request().url, {headers: {accept: 'text/html'}}));
+  assert.equal(result.status, 200);
+  assert.match(await result.text(), /Starting Shogi/);
+  assert.equal(background.length, 1);
+  finish();
+  await Promise.all(background);
+});
+
+test('outer Worker binding failures also show a browser waiting screen', async () => {
+  const result = await context.handlers.worker.fetch(new Request(request().url, {
+    headers: {accept: 'text/html'},
+  }), {
+    PUBLIC_ORIGIN: 'https://shogi.what-the-fuck.men',
+    LISHOGI: {idFromName: () => 'id', get: () => ({fetch: async () => {throw new Error('Private infrastructure detail');}})},
+  });
+  assert.equal(result.status, 200);
+  const html = await result.text();
+  assert.match(html, /Starting Shogi/);
+  assert.doesNotMatch(html, /Private infrastructure detail/);
+});
+
+test('health cannot report ready after the container has exited', async () => {
+  const {server} = fixture();
+  server.applicationReady = true;
+  server.stage('ready');
+  server.container.running = false;
+  const result = await server.fetch(new Request('https://shogi.what-the-fuck.men/healthz'));
+  assert.equal(result.status, 503);
+  assert.equal((await result.json()).ready, false);
+  assert.equal(server.startupStage, 'stopped');
+});
+
+test('upstream connection failure clears readiness before the waiting page polls health', async () => {
+  const {server} = fixture();
+  server.applicationReady = true;
+  server.bootPromise = Promise.resolve();
+  server.stage('ready');
+  server.ensureReady = async () => {};
+  server.containerFetch = async () => {throw new Error('Connection lost');};
+  const result = await server.fetch(new Request(request().url, {headers: {accept: 'text/html'}}));
+  assert.match(await result.text(), /Starting Shogi/);
+  assert.equal(server.bootPromise, undefined);
+  const health = await server.fetch(new Request('https://shogi.what-the-fuck.men/healthz'));
+  assert.equal(health.status, 503);
+  const state = await health.json();
+  assert.equal(state.ready, false);
+  assert.equal(state.stage, 'request-failed');
 });
