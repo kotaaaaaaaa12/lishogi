@@ -162,7 +162,8 @@ async function check() {
   const timeout = setTimeout(() => controller.abort(), 9000);
   try {
     const response = await fetch('/healthz', {cache: 'no-store', signal: controller.signal});
-    if (!response.ok) throw new Error('Status unavailable');
+    // The Worker returns 503 JSON while startup is in progress or has failed.
+    if (!response.ok && response.status !== 503) throw new Error('Status unavailable');
     const state = await response.json();
     if (state.ready) {
       render('ready');
@@ -204,3 +205,4 @@ void check();
 </body>
 </html>`;
 }
+
