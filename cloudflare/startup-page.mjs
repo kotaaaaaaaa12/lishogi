@@ -1,31 +1,36 @@
 import {startupResponse} from './readiness.mjs';
+import {startupLocale, startupMessages} from './startup-i18n.mjs';
 
 export function starting(request, stage, release) {
   const acceptsHtml = request.headers.get('accept')?.toLowerCase().includes('text/html');
   const websocket = request.headers.get('upgrade')?.toLowerCase() === 'websocket';
   if (request.method !== 'GET' || !acceptsHtml || websocket) return startupResponse(stage, release);
   const nonce = crypto.randomUUID().replaceAll('-', '');
-  return new Response(startupPage(stage, nonce), {
+  const locale = startupLocale(request.headers.get('accept-language'));
+  return new Response(startupPage(stage, nonce, locale), {
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store', 'retry-after': '5', 'vary': 'Accept, Upgrade',
+      'content-language': locale,
+      'cache-control': 'no-store', 'retry-after': '5', 'vary': 'Accept, Upgrade, Accept-Language',
       'x-content-type-options': 'nosniff', 'referrer-policy': 'same-origin',
       'content-security-policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`,
     },
   });
 }
 
-export function startupPage(stage = 'idle', nonce = '') {
+export function startupPage(stage = 'idle', nonce = '', locale = 'en') {
+  const text = startupMessages(locale);
+  const serializedMessages = JSON.stringify(text).replaceAll('<', '\\u003c');
   const initialStage = JSON.stringify(String(stage)).replaceAll('<', '\\u003c');
   const squares = '<span class="square"></span>'.repeat(81);
   return `<!doctype html>
-<html lang="en">
+<html lang="${text.locale}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#121813">
-<title>Starting Shogi · Getting ready</title>
+<title>${text.title}</title>
 <style>
 :root{color-scheme:dark;--bg:#121813;--card:#1a221c;--ink:#f3f3e9;--muted:#a3afa4;--line:#ffffff12;--accent:#c6e99b;--tile-dark:#384b3b;--tile-light:#829875;--tile:44px;--danger:#efb4a3;--soft:#101811;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 *{box-sizing:border-box}
@@ -46,6 +51,7 @@ button,a{-webkit-tap-highlight-color:transparent}
 .piece svg{width:33px;height:40px;overflow:visible}
 .piece-shadow{position:absolute;width:28px;height:7px;border-radius:50%;background:#15201655;bottom:3px;left:8px}
 h1{font-size:clamp(25px,6vw,31px);line-height:1.17;letter-spacing:-.045em;font-weight:620;margin:0 0 11px;text-wrap:balance}
+:lang(ja) h1{letter-spacing:0;line-height:1.4}
 .intro{color:var(--muted);font-size:14px;line-height:1.65;margin:0 auto;max-width:32ch;text-wrap:pretty}
 .status-box{margin-top:27px;padding-top:22px;border-top:1px solid var(--line)}
 .status-row{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left}
@@ -91,41 +97,42 @@ noscript a{color:var(--accent)}
 </head>
 <body data-state="loading">
 <main class="shell">
-  <div class="brand"><svg viewBox="0 0 40 48" aria-hidden="true"><path d="M20 4 32 10 36 43H4L8 10Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><path d="M13 17h14M20 17v17M14 25h12M11 34h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Shogi</div>
+  <div class="brand"><svg viewBox="0 0 40 48" aria-hidden="true"><path d="M20 4 32 10 36 43H4L8 10Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><path d="M13 17h14M20 17v17M14 25h12M11 34h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> ${text.brand}</div>
   <section class="card" aria-labelledby="heading">
-    <div class="label"><span class="dot"></span><span id="badge">Your board is waking up</span></div>
+    <div class="label"><span class="dot"></span><span id="badge">${text.badge}</span></div>
     <div class="scene" aria-hidden="true"><div class="board">${squares}<div class="tile-glow"></div></div><div class="piece"><span class="piece-shadow"></span><svg viewBox="0 0 40 48"><path d="M20 3 32 10 36 43H4L8 10Z" fill="#f2d09a" stroke="#684722" stroke-width="1.5" stroke-linejoin="round"/><path d="M13 17h14M20 17v17M14 25h12M11 34h18" fill="none" stroke="#50361d" stroke-width="2.3" stroke-linecap="round"/></svg></div></div>
-    <h1 id="heading">Getting your board ready.</h1>
-    <p class="intro" id="intro">Your board will open as soon as it is ready.</p>
+    <h1 id="heading">${text.heading}</h1>
+    <p class="intro" id="intro">${text.intro}</p>
     <div class="status-box">
-      <div class="status-row"><span id="status" role="status" aria-live="polite">Waking up the server…</span><span class="spinner" aria-hidden="true"></span></div>
-      <div class="steps" aria-label="Startup stages">
-        <div class="step active" data-step="0" aria-current="step"><div class="step-line"></div><span>01</span><span>Wake up</span></div>
-        <div class="step" data-step="1"><div class="step-line"></div><span>02</span><span>Restore</span></div>
-        <div class="step" data-step="2"><div class="step-line"></div><span>03</span><span>Get ready</span></div>
+      <div class="status-row"><span id="status" role="status" aria-live="polite">${text.stages.idle}</span><span class="spinner" aria-hidden="true"></span></div>
+      <div class="steps" aria-label="${text.stepsLabel}">
+        <div class="step active" data-step="0" aria-current="step"><div class="step-line"></div><span>01</span><span>${text.steps[0]}</span></div>
+        <div class="step" data-step="1"><div class="step-line"></div><span>02</span><span>${text.steps[1]}</span></div>
+        <div class="step" data-step="2"><div class="step-line"></div><span>03</span><span>${text.steps[2]}</span></div>
       </div>
     </div>
-    <button type="button" id="retry" hidden>Try again</button>
-    <details id="details" hidden><summary>Show details</summary><pre id="error"></pre></details>
-    <noscript>Automatic refresh needs JavaScript. <a href="">Reload this page</a> to check again.</noscript>
+    <button type="button" id="retry" hidden>${text.retry}</button>
+    <details id="details" hidden><summary>${text.details}</summary><pre id="error"></pre></details>
+    <noscript>${text.noscriptBefore}<a href="">${text.noscriptLink}</a>${text.noscriptAfter}</noscript>
   </section>
-  <div class="footnote"><span class="auto"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M12.8 6A5 5 0 1 0 13 9M10 5.5h3.5V2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="auto-label">Opens automatically when ready</span></span><span id="elapsed">00:00</span></div>
+  <div class="footnote"><span class="auto"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M12.8 6A5 5 0 1 0 13 9M10 5.5h3.5V2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="auto-label">${text.auto}</span></span><span id="elapsed">00:00</span></div>
 </main>
 <script nonce="${nonce}">
 const initialStage = ${initialStage};
+const messages = ${serializedMessages};
 const stages = {
-  'idle': [0, 'Waking up the server…'],
-  'container-port': [0, 'Waking up the server…'],
-  'database-ready': [0, 'Preparing saved games…'],
-  'container-status': [0, 'Preparing saved games…'],
-  'backup-load': [1, 'Finding saved games…'],
-  'database-restore': [1, 'Restoring saved games…'],
-  'application-initialize': [2, 'Setting up your board…'],
-  'initial-backup': [2, 'Saving a fresh checkpoint…'],
-  'checkpoint-schedule': [2, 'Finishing startup…'],
-  'final-backup': [2, 'Saving your progress…'],
-  'idle-shutdown': [2, 'Finishing the previous session…'],
-  'ready': [3, 'Your board is ready.'],
+  'idle': [0, messages.stages.idle],
+  'container-port': [0, messages.stages['container-port']],
+  'database-ready': [0, messages.stages['database-ready']],
+  'container-status': [0, messages.stages['container-status']],
+  'backup-load': [1, messages.stages['backup-load']],
+  'database-restore': [1, messages.stages['database-restore']],
+  'application-initialize': [2, messages.stages['application-initialize']],
+  'initial-backup': [2, messages.stages['initial-backup']],
+  'checkpoint-schedule': [2, messages.stages['checkpoint-schedule']],
+  'final-backup': [2, messages.stages['final-backup']],
+  'idle-shutdown': [2, messages.stages['idle-shutdown']],
+  'ready': [3, messages.stages.ready],
 };
 const failures = ['failed', 'container-error', 'missing-secrets', 'request-failed'];
 const el = id => document.getElementById(id);
@@ -137,15 +144,15 @@ const began = Date.now();
 function render(stage, error) {
   const failed = failures.includes(stage) || (stage === 'stopped' && Boolean(error));
   document.body.dataset.state = failed ? 'error' : 'loading';
-  el('heading').textContent = failed ? 'The board needs a moment.' : 'Getting your board ready.';
-  el('intro').textContent = failed ? 'The server could not finish starting. You can try again below.' : 'Your board will open as soon as it is ready.';
-  el('badge').textContent = failed ? 'Startup paused' : 'Your board is waking up';
+  el('heading').textContent = failed ? messages.errorHeading : messages.heading;
+  el('intro').textContent = failed ? messages.errorIntro : messages.intro;
+  el('badge').textContent = failed ? messages.errorBadge : messages.badge;
   el('retry').hidden = !failed;
   el('details').hidden = !failed || !error;
   el('error').textContent = error || '';
-  el('auto-label').textContent = failed ? 'Waiting for the server to recover' : 'Opens automatically when ready';
-  const [phase, message] = stages[stage] || [0, 'Connecting to the server…'];
-  el('status').textContent = failed ? 'Unable to start the server.' : message;
+  el('auto-label').textContent = failed ? messages.errorAuto : messages.auto;
+  const [phase, message] = stages[stage] || [0, messages.connecting];
+  el('status').textContent = failed ? messages.errorStatus : message;
   for (const step of document.querySelectorAll('[data-step]')) {
     const index = Number(step.dataset.step);
     step.classList.toggle('done', index < phase);
@@ -179,8 +186,8 @@ async function check() {
       restartTimer = undefined;
     }
   } catch {
-    el('status').textContent = 'Reconnecting to the server…';
-    el('auto-label').textContent = 'We will check again automatically';
+    el('status').textContent = messages.reconnect;
+    el('auto-label').textContent = messages.reconnectAuto;
   } finally {
     clearTimeout(timeout);
     checking = false;
@@ -205,4 +212,5 @@ void check();
 </body>
 </html>`;
 }
+
 
